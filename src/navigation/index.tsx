@@ -21,12 +21,19 @@ import { colors, typography } from '../theme';
 
 // Screens
 import LoginScreen from '../screens/LoginScreen';
+import RegisterScreen from '../screens/RegisterScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import CampsScreen from '../screens/CampsScreen';
 import CampDetailScreen from '../screens/CampDetailScreen';
+import CartScreen from '../screens/CartScreen';
+import CheckoutScreen from '../screens/CheckoutScreen';
 import TrainersScreen from '../screens/TrainersScreen';
 import TrainerDetailScreen from '../screens/TrainerDetailScreen';
 import ScheduleScreen from '../screens/ScheduleScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
+import OrdersScreen from '../screens/OrdersScreen';
+import OrderDetailScreen from '../screens/OrderDetailScreen';
 import OnboardingScreen, { checkOnboardingComplete } from '../screens/OnboardingScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ChatListScreen from '../screens/ChatListScreen';
@@ -40,6 +47,7 @@ import {
   CampsStackParamList,
   TrainingStackParamList,
   MessagesStackParamList,
+  ProfileStackParamList,
 } from '../types';
 
 // =============================================================================
@@ -52,6 +60,7 @@ const MainTab = createBottomTabNavigator<MainTabParamList>();
 const CampsStackNav = createNativeStackNavigator<CampsStackParamList>();
 const TrainingStackNav = createNativeStackNavigator<TrainingStackParamList>();
 const MessagesStackNav = createNativeStackNavigator<MessagesStackParamList>();
+const ProfileStackNav = createNativeStackNavigator<ProfileStackParamList>();
 
 // =============================================================================
 // Tab Icon Component
@@ -104,6 +113,8 @@ const AuthStack: React.FC = () => {
       }}
     >
       <AuthStackNav.Screen name="Login" component={LoginScreen} />
+      <AuthStackNav.Screen name="Register" component={RegisterScreen} />
+      <AuthStackNav.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
     </AuthStackNav.Navigator>
   );
 };
@@ -139,6 +150,20 @@ const CampsStack: React.FC = () => {
         component={CampDetailScreen}
         options={{
           title: 'Camp Details',
+        }}
+      />
+      <CampsStackNav.Screen
+        name="Cart"
+        component={CartScreen}
+        options={{
+          title: 'Your Cart',
+        }}
+      />
+      <CampsStackNav.Screen
+        name="Checkout"
+        component={CheckoutScreen}
+        options={{
+          title: 'Checkout',
         }}
       />
     </CampsStackNav.Navigator>
@@ -212,6 +237,57 @@ const MessagesStack: React.FC = () => {
         options={{ title: 'Chat' }}
       />
     </MessagesStackNav.Navigator>
+  );
+};
+
+// =============================================================================
+// Profile Stack
+// =============================================================================
+
+const ProfileStack: React.FC = () => {
+  return (
+    <ProfileStackNav.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: colors.white,
+        },
+        headerTintColor: colors.ink,
+        headerTitleStyle: {
+          fontWeight: typography.weights.semibold,
+        },
+        headerShadowVisible: false,
+        headerBackTitleVisible: false,
+      }}
+    >
+      <ProfileStackNav.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          title: 'Profile',
+        }}
+      />
+      <ProfileStackNav.Screen
+        name="EditProfile"
+        component={EditProfileScreen}
+        options={{
+          title: 'Edit Profile',
+        }}
+      />
+      <ProfileStackNav.Screen
+        name="Orders"
+        component={OrdersScreen}
+        options={{
+          title: 'Order History',
+        }}
+      />
+      <ProfileStackNav.Screen
+        name="OrderDetail"
+        component={OrderDetailScreen}
+        options={{
+          title: 'Order Details',
+        }}
+      />
+    </ProfileStackNav.Navigator>
   );
 };
 
@@ -306,22 +382,13 @@ const MainTabs: React.FC = () => {
       />
       <MainTab.Screen
         name="ProfileTab"
-        component={ProfileScreen}
+        component={ProfileStack}
         options={{
           tabBarLabel: 'Profile',
           tabBarIcon: ({ focused }) => (
             <TabIcon label="Profile" focused={focused} />
           ),
-          headerShown: true,
-          headerTitle: 'Profile',
-          headerStyle: {
-            backgroundColor: colors.white,
-          },
-          headerTintColor: colors.ink,
-          headerTitleStyle: {
-            fontWeight: typography.weights.semibold,
-          },
-          headerShadowVisible: false,
+          headerShown: false,
         }}
       />
     </MainTab.Navigator>

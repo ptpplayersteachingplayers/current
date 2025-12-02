@@ -195,6 +195,8 @@ export type RootStackParamList = {
 
 export type AuthStackParamList = {
   Login: undefined;
+  Register: undefined;
+  ForgotPassword: undefined;
 };
 
 export type MainTabParamList = {
@@ -209,6 +211,9 @@ export type MainTabParamList = {
 export type CampsStackParamList = {
   Camps: undefined;
   CampDetail: { camp: Camp };
+  Cart: undefined;
+  Checkout: undefined;
+  Orders: undefined;
 };
 
 export type TrainingStackParamList = {
@@ -220,6 +225,122 @@ export type MessagesStackParamList = {
   ChatList: undefined;
   Chat: { conversationId: string; title?: string };
 };
+
+export type ProfileStackParamList = {
+  Profile: undefined;
+  EditProfile: undefined;
+  Orders: undefined;
+  OrderDetail: { order: Order };
+};
+
+// =============================================================================
+// Registration Types
+// =============================================================================
+
+export interface RegisterCredentials {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+}
+
+export interface RegisterResponse {
+  success: boolean;
+  message: string;
+  user_id?: number;
+}
+
+// =============================================================================
+// Cart Types
+// =============================================================================
+
+export interface CartItem {
+  id: number;
+  productId: number;
+  name: string;
+  price: string;
+  quantity: number;
+  image?: string;
+  date?: string;
+}
+
+export interface AddToCartRequest {
+  productId: number;
+  quantity: number;
+}
+
+// =============================================================================
+// Order Types
+// =============================================================================
+
+export interface Order {
+  id: number;
+  orderNumber: string;
+  date: string;
+  status: OrderStatus;
+  items: OrderItem[];
+  subtotal?: string;
+  discount?: string;
+  tax?: string;
+  total: string;
+  billing?: BillingInfo;
+  paymentMethod?: 'card' | 'paypal';
+  transactionId?: string;
+}
+
+export type OrderStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'cancelled'
+  | 'refunded';
+
+export interface OrderItem {
+  id: number;
+  name: string;
+  price: string;
+  quantity: number;
+  date?: string;
+  location?: string;
+}
+
+export interface BillingInfo {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+}
+
+export interface CreateOrderRequest {
+  billing: BillingInfo;
+  paymentMethod: 'card' | 'paypal';
+  items: { productId: number; quantity: number }[];
+}
+
+export interface CreateOrderResponse {
+  orderId: number;
+  orderNumber: string;
+  paymentUrl?: string;
+}
+
+// =============================================================================
+// Profile Types
+// =============================================================================
+
+export interface UpdateProfileRequest {
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
 
 // =============================================================================
 // Utility Types

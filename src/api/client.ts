@@ -25,6 +25,15 @@ import {
   DeviceRegistrationResponse,
   ApiError,
   AppConfig,
+  RegisterCredentials,
+  RegisterResponse,
+  CartItem,
+  AddToCartRequest,
+  Order,
+  CreateOrderRequest,
+  CreateOrderResponse,
+  UpdateProfileRequest,
+  ChangePasswordRequest,
 } from '../types';
 
 // =============================================================================
@@ -364,6 +373,166 @@ const normalizeSession = (raw: Partial<Session>): Session => {
     trainer_name: raw.trainer_name,
     status: raw.status ?? 'upcoming',
   };
+};
+
+// =============================================================================
+// Registration & Password Reset
+// =============================================================================
+
+/**
+ * Register a new user account
+ */
+export const registerUser = async (
+  credentials: RegisterCredentials
+): Promise<RegisterResponse> => {
+  const response = await apiClient.post<RegisterResponse>('/ptp/v1/register', {
+    first_name: credentials.firstName,
+    last_name: credentials.lastName,
+    email: credentials.email,
+    password: credentials.password,
+  });
+  return response.data;
+};
+
+/**
+ * Request a password reset email
+ */
+export const requestPasswordReset = async (email: string): Promise<{ success: boolean }> => {
+  const response = await apiClient.post<{ success: boolean }>(
+    '/ptp/v1/password-reset',
+    { email }
+  );
+  return response.data;
+};
+
+// =============================================================================
+// Profile Management
+// =============================================================================
+
+/**
+ * Update user profile
+ */
+export const updateProfile = async (data: UpdateProfileRequest): Promise<User> => {
+  const response = await apiClient.put<User>('/ptp/v1/me', {
+    first_name: data.firstName,
+    last_name: data.lastName,
+    email: data.email,
+  });
+  return response.data;
+};
+
+/**
+ * Change user password
+ */
+export const changePassword = async (data: ChangePasswordRequest): Promise<{ success: boolean }> => {
+  const response = await apiClient.post<{ success: boolean }>(
+    '/ptp/v1/change-password',
+    {
+      current_password: data.currentPassword,
+      new_password: data.newPassword,
+    }
+  );
+  return response.data;
+};
+
+// =============================================================================
+// Cart Functions (WooCommerce Integration)
+// =============================================================================
+
+/**
+ * Get current cart items
+ */
+export const getCart = async (): Promise<CartItem[]> => {
+  const response = await apiClient.get<CartItem[]>('/ptp/v1/cart');
+
+  if (!Array.isArray(response.data)) {
+    return [];
+  }
+
+  return response.data;
+};
+
+/**
+ * Add item to cart
+ */
+export const addToCart = async (data: AddToCartRequest): Promise<CartItem[]> => {
+  const response = await apiClient.post<CartItem[]>('/ptp/v1/cart', data);
+  return response.data;
+};
+
+/**
+ * Update cart item quantity
+ */
+export const updateCartItem = async (
+  itemId: number,
+  quantity: number
+): Promise<CartItem[]> => {
+  const response = await apiClient.put<CartItem[]>(`/ptp/v1/cart/${itemId}`, {
+    quantity,
+  });
+  return response.data;
+};
+
+/**
+ * Remove item from cart
+ */
+export const removeCartItem = async (itemId: number): Promise<CartItem[]> => {
+  const response = await apiClient.delete<CartItem[]>(`/ptp/v1/cart/${itemId}`);
+  return response.data;
+};
+
+/**
+ * Clear entire cart
+ */
+export const clearCart = async (): Promise<{ success: boolean }> => {
+  const response = await apiClient.delete<{ success: boolean }>('/ptp/v1/cart');
+  return response.data;
+};
+
+// =============================================================================
+// Order Functions
+// =============================================================================
+
+/**
+ * Get user's order history
+ */
+export const getOrders = async (): Promise<Order[]> => {
+  const response = await apiClient.get<Order[]>('/ptp/v1/orders');
+
+  if (!Array.isArray(response.data)) {
+    return [];
+  }
+
+  return response.data;
+};
+
+/**
+ * Get single order details
+ */
+export const getOrder = async (orderId: number): Promise<Order> => {
+  const response = await apiClient.get<Order>(`/ptp/v1/orders/${orderId}`);
+  return response.data;
+};
+
+/**
+ * Create a new order from cart
+ */
+export const createOrder = async (data: CreateOrderRequest): Promise<CreateOrderResponse> => {
+  const response = await apiClient.post<CreateOrderResponse>('/ptp/v1/orders', {
+    billing: {
+      first_name: data.billing.firstName,
+      last_name: data.billing.lastName,
+      email: data.billing.email,
+      phone: data.billing.phone,
+      address_1: data.billing.address,
+      city: data.billing.city,
+      state: data.billing.state,
+      postcode: data.billing.zipCode,
+    },
+    payment_method: data.paymentMethod,
+    line_items: data.items,
+  });
+  return response.data;
 };
 
 // =============================================================================

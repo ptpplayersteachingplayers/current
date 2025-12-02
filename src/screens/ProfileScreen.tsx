@@ -20,11 +20,15 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { Card, PrimaryButton } from '../components';
 import { colors, spacing, typography, borderRadius } from '../theme';
+import { ProfileStackParamList } from '../types';
 
-const ProfileScreen: React.FC = () => {
+type Props = NativeStackScreenProps<ProfileStackParamList, 'Profile'>;
+
+const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { user, logout, isLoading, isGuest } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -132,19 +136,38 @@ const ProfileScreen: React.FC = () => {
 
           <Card style={styles.menuCard} noPadding>
             <MenuItem
-              icon="?"
-              label="Manage Notifications"
-              onPress={handleOpenNotificationSettings}
+              icon="✏️"
+              label="Edit Profile"
+              onPress={() => navigation.navigate('EditProfile')}
             />
             <View style={styles.menuDivider} />
             <MenuItem
-              icon="?"
+              icon="📋"
+              label="Order History"
+              onPress={() => navigation.navigate('Orders')}
+            />
+            <View style={styles.menuDivider} />
+            <MenuItem
+              icon="🔔"
+              label="Manage Notifications"
+              onPress={handleOpenNotificationSettings}
+            />
+          </Card>
+        </View>
+
+        {/* Support Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Support</Text>
+
+          <Card style={styles.menuCard} noPadding>
+            <MenuItem
+              icon="💬"
               label="Contact Support"
               onPress={handleContactSupport}
             />
             <View style={styles.menuDivider} />
             <MenuItem
-              icon="?"
+              icon="🌐"
               label="Visit Website"
               onPress={handleVisitWebsite}
               external
@@ -158,14 +181,14 @@ const ProfileScreen: React.FC = () => {
 
           <Card style={styles.menuCard} noPadding>
             <MenuItem
-              icon="?"
+              icon="🔒"
               label="Privacy Policy"
               onPress={handlePrivacyPolicy}
               external
             />
             <View style={styles.menuDivider} />
             <MenuItem
-              icon="?"
+              icon="📄"
               label="Terms of Service"
               onPress={handleTermsOfService}
               external
@@ -213,7 +236,7 @@ const MenuItem: React.FC<MenuItemProps> = ({ icon, label, onPress, external }) =
   >
     <Text style={styles.menuIcon}>{icon}</Text>
     <Text style={styles.menuLabel}>{label}</Text>
-    <Text style={styles.menuArrow}>{external ? '?' : '?'}</Text>
+    <Text style={styles.menuArrow}>{external ? '↗' : '›'}</Text>
   </TouchableOpacity>
 );
 

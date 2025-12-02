@@ -7,58 +7,67 @@
  * - CTA to book (opens web checkout)
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   Image,
-  Linking,
+  TouchableOpacity,
   Alert,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { PrimaryButton, Badge } from '../components';
 import { colors, spacing, typography, borderRadius } from '../theme';
 import { CampsStackParamList } from '../types';
+import { addToCart } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<CampsStackParamList, 'CampDetail'>;
 
-const CampDetailScreen: React.FC<Props> = ({ route }) => {
+const CampDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const { camp } = route.params;
+  const { user, isGuest } = useAuth();
+  const queryClient = useQueryClient();
+  const [quantity, setQuantity] = useState(1);
 
-  const handleRegister = async () => {
-    if (camp.product_url) {
-      try {
-        const supported = await Linking.canOpenURL(camp.product_url);
-        if (supported) {
-          await Linking.openURL(camp.product_url);
-        } else {
-          Alert.alert(
-            'Unable to Open',
-            'Please visit ptpsummercamps.com to register.'
-          );
-        }
-      } catch {
-        Alert.alert(
-          'Error',
-          'Unable to open registration page. Please visit ptpsummercamps.com.'
-        );
-      }
-    } else {
+  const addToCartMutation = useMutation({
+    mutationFn: () => addToCart({ productId: camp.id, quantity }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cart'] });
       Alert.alert(
-        'Register',
-        'To register for this camp, please visit ptpsummercamps.com',
+        'Added to Cart',
+        `${camp.name} has been added to your cart.`,
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: 'Continue Shopping', style: 'cancel' },
           {
-            text: 'Visit Website',
-            onPress: () => Linking.openURL('https://ptpsummercamps.com'),
+            text: 'View Cart',
+            onPress: () => navigation.navigate('Cart'),
           },
         ]
       );
+    },
+    onError: (error) => {
+      Alert.alert(
+        'Error',
+        error instanceof Error ? error.message : 'Failed to add to cart'
+      );
+    },
+  });
+
+  const handleAddToCart = () => {
+    if (isGuest || !user) {
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in to add items to your cart.',
+        [{ text: 'OK' }]
+      );
+      return;
     }
+    addToCartMutation.mutate();
   };
 
   return (
@@ -142,19 +151,19 @@ const CampDetailScreen: React.FC<Props> = ({ route }) => {
           <View style={styles.includesSection}>
             <Text style={styles.sectionTitle}>What's Included</Text>
             <View style={styles.includeItem}>
-              <Text style={styles.includeIcon}>?</Text>
+              <Text style={styles.includeIcon}>⚽</Text>
               <Text style={styles.includeText}>Professional coaching from NCAA & pro players</Text>
             </View>
             <View style={styles.includeItem}>
-              <Text style={styles.includeIcon}>?</Text>
+              <Text style={styles.includeIcon}>👕</Text>
               <Text style={styles.includeText}>PTP camp t-shirt</Text>
             </View>
             <View style={styles.includeItem}>
-              <Text style={styles.includeIcon}>?</Text>
+              <Text style={styles.includeIcon}>📊</Text>
               <Text style={styles.includeText}>Skills assessment and feedback</Text>
             </View>
             <View style={styles.includeItem}>
-              <Text style={styles.includeIcon}>?</Text>
+              <Text style={styles.includeIcon}>🏆</Text>
               <Text style={styles.includeText}>Fun, competitive environment</Text>
             </View>
           </View>
@@ -163,14 +172,36 @@ const CampDetailScreen: React.FC<Props> = ({ route }) => {
 
       {/* Fixed Bottom CTA */}
       <View style={styles.bottomCta}>
+        {/* Quantity Selector */}
+        <View style={styles.quantityRow}>
+          <Text style={styles.quantityLabel}>Campers:</Text>
+          <View style={styles.quantityControls}>
+            <TouchableOpacity
+              style={[styles.quantityButton, quantity <= 1 && styles.quantityButtonDisabled]}
+              onPress={() => setQuantity((q) => Math.max(1, q - 1))}
+              disabled={quantity <= 1}
+            >
+              <Text style={styles.quantityButtonText}>−</Text>
+            </TouchableOpacity>
+            <Text style={styles.quantityValue}>{quantity}</Text>
+            <TouchableOpacity
+              style={styles.quantityButton}
+              onPress={() => setQuantity((q) => q + 1)}
+            >
+              <Text style={styles.quantityButtonText}>+</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         <View style={styles.bottomCtaContent}>
           <View>
             <Text style={styles.bottomPrice}>{camp.price}</Text>
             <Text style={styles.bottomPriceLabel}>per camper</Text>
           </View>
           <PrimaryButton
-            title="Register Now"
-            onPress={handleRegister}
+            title="Add to Cart"
+            onPress={handleAddToCart}
+            loading={addToCartMutation.isPending}
             style={styles.registerButton}
           />
         </View>
@@ -322,6 +353,49 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     paddingBottom: spacing.xl,
   },
+  quantityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  quantityLabel: {
+    fontSize: typography.sizes.md,
+    color: colors.gray,
+  },
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  quantityButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.offWhite,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  quantityButtonDisabled: {
+    opacity: 0.5,
+  },
+  quantityButtonText: {
+    fontSize: 20,
+    color: colors.ink,
+    fontWeight: typography.weights.medium,
+  },
+  quantityValue: {
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.semibold,
+    color: colors.ink,
+    marginHorizontal: spacing.lg,
+    minWidth: 24,
+    textAlign: 'center',
+  },
   bottomCtaContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -337,7 +411,7 @@ const styles = StyleSheet.create({
     color: colors.gray,
   },
   registerButton: {
-    minWidth: 160,
+    minWidth: 140,
   },
 });
 

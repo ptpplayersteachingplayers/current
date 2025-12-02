@@ -18,13 +18,14 @@ import React, {
 } from 'react';
 import {
   login as apiLogin,
+  registerUser as apiRegister,
   getMe,
   setAuthToken,
   clearAuthToken,
   loadStoredToken,
   ApiClientError,
 } from '../api/client';
-import { User, LoginCredentials } from '../types';
+import { User, LoginCredentials, RegisterCredentials } from '../types';
 import queryClient from '../api/queryClient';
 
 // =============================================================================
@@ -40,8 +41,10 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
+  register: (credentials: RegisterCredentials) => Promise<void>;
   logout: () => Promise<void>;
   continueAsGuest: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 // =============================================================================
@@ -195,11 +198,68 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     });
   }, []);
 
+  /**
+   * Register a new user
+   */
+  const register = useCallback(async (credentials: RegisterCredentials): Promise<void> => {
+    setState((prev) => ({ ...prev, isLoading: true }));
+
+    try {
+      // Call register API
+      await apiRegister(credentials);
+
+      // Auto-login after successful registration
+      const loginResponse = await apiLogin({
+        username: credentials.email,
+        password: credentials.password,
+      });
+
+      // Store the token
+      await setAuthToken(loginResponse.token);
+
+      // Fetch full user info
+      const user = await getMe();
+
+      setState({
+        user,
+        isLoading: false,
+        isInitialized: true,
+        isGuest: false,
+      });
+
+    } catch (error) {
+      setState((prev) => ({ ...prev, isLoading: false }));
+
+      if (error instanceof ApiClientError) {
+        if (error.code === 'registration_failed' || error.message.includes('exists')) {
+          throw new Error('An account with this email already exists.');
+        }
+        throw new Error(error.message);
+      }
+
+      throw new Error('Unable to create account. Please try again.');
+    }
+  }, []);
+
+  /**
+   * Refresh user data from server
+   */
+  const refreshUser = useCallback(async (): Promise<void> => {
+    try {
+      const user = await getMe();
+      setState((prev) => ({ ...prev, user }));
+    } catch (error) {
+      console.error('Error refreshing user:', error);
+    }
+  }, []);
+
   const value: AuthContextValue = {
     ...state,
     login,
+    register,
     logout,
     continueAsGuest,
+    refreshUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

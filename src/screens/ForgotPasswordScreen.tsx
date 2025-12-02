@@ -1,13 +1,10 @@
 /**
- * PTP Mobile App - Login Screen
+ * PTP Mobile App - Forgot Password Screen
  *
  * Features:
- * - Hero background image with overlay
- * - Real PTP logo
- * - Email/username and password inputs
- * - PTP branded styling
- * - Loading state during login
- * - Error handling with clear messages
+ * - Email input for password reset
+ * - Success message display
+ * - Return to login
  */
 
 import React, { useState } from 'react';
@@ -26,59 +23,114 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useAuth } from '../context/AuthContext';
 import { PrimaryButton } from '../components';
 import { colors, spacing, typography, borderRadius, componentStyles } from '../theme';
 import { LOGO, SCREEN_IMAGES } from '../constants/images';
 import { AuthStackParamList } from '../types';
+import { requestPasswordReset } from '../api/client';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
+type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
 
-const LoginScreen: React.FC<Props> = ({ navigation }) => {
-  const { login, isLoading, continueAsGuest } = useAuth();
-
+const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [emailFocused, setEmailFocused] = useState(false);
-  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
 
-  const handleLogin = async () => {
-    // Clear previous errors
+  const validateEmail = (emailStr: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(emailStr);
+  };
+
+  const handleResetPassword = async () => {
     setError(null);
 
-    // Validate inputs
     const trimmedEmail = email.trim();
-    const trimmedPassword = password.trim();
 
     if (!trimmedEmail) {
-      setError('Please enter your email or username.');
+      setError('Please enter your email address.');
       return;
     }
 
-    if (!trimmedPassword) {
-      setError('Please enter your password.');
+    if (!validateEmail(trimmedEmail)) {
+      setError('Please enter a valid email address.');
       return;
     }
+
+    setIsLoading(true);
 
     try {
-      await login({
-        username: trimmedEmail,
-        password: trimmedPassword,
-      });
-      // Success - navigation will happen automatically via AuthContext
+      await requestPasswordReset(trimmedEmail);
+      setSuccess(true);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'An unexpected error occurred.';
       setError(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  if (success) {
+    return (
+      <View style={styles.container}>
+        <ImageBackground
+          source={{ uri: SCREEN_IMAGES.loginBackground }}
+          style={styles.heroBackground}
+          resizeMode="cover"
+        >
+          <View style={styles.heroOverlay}>
+            <SafeAreaView style={styles.heroContent}>
+              <Image
+                source={{ uri: LOGO.primary }}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            </SafeAreaView>
+          </View>
+        </ImageBackground>
+
+        <View style={styles.formWrapper}>
+          <View style={styles.formCard}>
+            <View style={styles.successIcon}>
+              <Text style={styles.successIconText}>✓</Text>
+            </View>
+            <Text style={styles.successTitle}>Check Your Email</Text>
+            <Text style={styles.successText}>
+              We've sent password reset instructions to{' '}
+              <Text style={styles.emailHighlight}>{email}</Text>
+            </Text>
+            <Text style={styles.successSubtext}>
+              If you don't see the email, check your spam folder.
+            </Text>
+
+            <PrimaryButton
+              title="Return to Login"
+              onPress={() => navigation.navigate('Login')}
+              style={styles.returnButton}
+            />
+
+            <TouchableOpacity
+              style={styles.resendButton}
+              onPress={() => {
+                setSuccess(false);
+                setEmail('');
+              }}
+            >
+              <Text style={styles.resendText}>Didn't receive it? Try again</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* Hero Background Image */}
+      {/* Hero Background */}
       <ImageBackground
         source={{ uri: SCREEN_IMAGES.loginBackground }}
         style={styles.heroBackground}
@@ -86,21 +138,20 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       >
         <View style={styles.heroOverlay}>
           <SafeAreaView style={styles.heroContent}>
-            {/* Logo */}
             <Image
               source={{ uri: LOGO.primary }}
               style={styles.logo}
               resizeMode="contain"
             />
-            <Text style={styles.heroTitle}>Players Teaching Players</Text>
+            <Text style={styles.heroTitle}>Reset Password</Text>
             <Text style={styles.heroSubtitle}>
-              Where NCAA & pro athletes coach the next generation
+              We'll send you instructions to reset your password
             </Text>
           </SafeAreaView>
         </View>
       </ImageBackground>
 
-      {/* Login Form Card */}
+      {/* Form */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.formWrapper}
@@ -112,9 +163,10 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.formCard}>
-            <Text style={styles.welcomeText}>Welcome Back</Text>
+            <Text style={styles.welcomeText}>Forgot Password?</Text>
             <Text style={styles.instructionText}>
-              Sign in to view your camps and training schedule
+              Enter the email address associated with your account and we'll send
+              you a link to reset your password.
             </Text>
 
             {/* Error Message */}
@@ -126,12 +178,12 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
             {/* Email Input */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email or Username</Text>
+              <Text style={styles.label}>Email Address</Text>
               <TextInput
                 style={[styles.input, emailFocused && styles.inputFocused]}
                 value={email}
                 onChangeText={setEmail}
-                placeholder="Enter your email"
+                placeholder="you@example.com"
                 placeholderTextColor={colors.grayLight}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -140,60 +192,26 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                 onFocus={() => setEmailFocused(true)}
                 onBlur={() => setEmailFocused(false)}
                 editable={!isLoading}
+                onSubmitEditing={handleResetPassword}
               />
             </View>
 
-            {/* Password Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={[styles.input, passwordFocused && styles.inputFocused]}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Enter your password"
-                placeholderTextColor={colors.grayLight}
-                secureTextEntry
-                textContentType="password"
-                onFocus={() => setPasswordFocused(true)}
-                onBlur={() => setPasswordFocused(false)}
-                editable={!isLoading}
-                onSubmitEditing={handleLogin}
-              />
-            </View>
-
-            {/* Login Button */}
+            {/* Submit Button */}
             <PrimaryButton
-              title="Log In"
-              onPress={handleLogin}
+              title="Send Reset Link"
+              onPress={handleResetPassword}
               loading={isLoading}
               disabled={isLoading}
-              style={styles.loginButton}
+              style={styles.submitButton}
             />
 
-            {/* Continue as Guest Button */}
+            {/* Back to Login */}
             <TouchableOpacity
-              style={styles.guestButton}
-              onPress={continueAsGuest}
-              disabled={isLoading}
+              style={styles.backButton}
+              onPress={() => navigation.navigate('Login')}
             >
-              <Text style={styles.guestButtonText}>Continue as Guest</Text>
+              <Text style={styles.backButtonText}>← Back to Login</Text>
             </TouchableOpacity>
-
-            {/* Forgot Password Link */}
-            <TouchableOpacity
-              style={styles.forgotPasswordButton}
-              onPress={() => navigation.navigate('ForgotPassword')}
-            >
-              <Text style={styles.forgotPasswordText}>Forgot your password?</Text>
-            </TouchableOpacity>
-
-            {/* Footer */}
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-                <Text style={styles.footerLink}>Create Account</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -209,7 +227,7 @@ const styles = StyleSheet.create({
 
   // Hero Section
   heroBackground: {
-    height: SCREEN_HEIGHT * 0.38,
+    height: SCREEN_HEIGHT * 0.32,
     width: '100%',
   },
   heroOverlay: {
@@ -223,8 +241,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
   },
   logo: {
-    width: 120,
-    height: 80,
+    width: 100,
+    height: 66,
     marginBottom: spacing.md,
   },
   heroTitle: {
@@ -258,7 +276,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
     paddingTop: spacing.xxxl,
     paddingBottom: spacing.xxl,
-    minHeight: SCREEN_HEIGHT * 0.65,
   },
 
   // Form Content
@@ -290,7 +307,7 @@ const styles = StyleSheet.create({
 
   // Input
   inputGroup: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xl,
   },
   label: {
     fontSize: typography.sizes.sm,
@@ -306,55 +323,75 @@ const styles = StyleSheet.create({
   },
 
   // Button
-  loginButton: {
+  submitButton: {
     marginTop: spacing.md,
   },
 
-  // Guest Button
-  guestButton: {
+  // Back Button
+  backButton: {
     alignItems: 'center',
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
     padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.white,
   },
-  guestButtonText: {
+  backButtonText: {
     fontSize: typography.sizes.md,
-    color: colors.ink,
+    color: colors.gray,
     fontWeight: typography.weights.medium,
   },
 
-  // Forgot Password
-  forgotPasswordButton: {
+  // Success State
+  successIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: spacing.xl,
+  },
+  successIconText: {
+    fontSize: 40,
+    color: colors.white,
+    fontWeight: typography.weights.bold,
+  },
+  successTitle: {
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.bold,
+    color: colors.ink,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  successText: {
+    fontSize: typography.sizes.md,
+    color: colors.gray,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+    lineHeight: typography.sizes.md * typography.lineHeights.normal,
+  },
+  emailHighlight: {
+    fontWeight: typography.weights.semibold,
+    color: colors.ink,
+  },
+  successSubtext: {
+    fontSize: typography.sizes.sm,
+    color: colors.grayLight,
+    textAlign: 'center',
+    marginBottom: spacing.xxl,
+  },
+  returnButton: {
+    marginTop: spacing.md,
+  },
+  resendButton: {
     alignItems: 'center',
     marginTop: spacing.xl,
     padding: spacing.sm,
   },
-  forgotPasswordText: {
-    fontSize: typography.sizes.sm,
-    color: colors.gray,
-    textDecorationLine: 'underline',
-  },
-
-  // Footer
-  footer: {
-    marginTop: 'auto',
-    paddingTop: spacing.xl,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: typography.sizes.sm,
-    color: colors.gray,
-  },
-  footerLink: {
+  resendText: {
     fontSize: typography.sizes.sm,
     color: colors.primary,
-    fontWeight: typography.weights.medium,
+    textDecorationLine: 'underline',
   },
 });
 
-export default LoginScreen;
+export default ForgotPasswordScreen;

@@ -24,7 +24,6 @@ import {
   loadStoredToken,
   ApiClientError,
 } from '../api/client';
-import { registerDeviceToken } from '../utils/notifications';
 import { User, LoginCredentials } from '../types';
 
 // =============================================================================
@@ -81,9 +80,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               isInitialized: true,
             });
 
-            // Re-register device for push notifications
-            // (token may have changed or expired on server)
-            registerDeviceToken().catch(console.error);
           } catch (error) {
             // Token is invalid or expired, clear it
             console.log('Stored token invalid, clearing...');
@@ -137,8 +133,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isInitialized: true,
       });
 
-      // Register device for push notifications (fire and forget)
-      registerDeviceToken().catch(console.error);
     } catch (error) {
       setState((prev) => ({ ...prev, isLoading: false }));
 

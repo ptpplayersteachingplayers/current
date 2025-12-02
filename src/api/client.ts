@@ -24,6 +24,7 @@ import {
   DeviceRegistration,
   DeviceRegistrationResponse,
   ApiError,
+  AppConfig,
 } from '../types';
 
 // =============================================================================
@@ -222,8 +223,16 @@ export const getMe = async (): Promise<User> => {
  * Get list of camps and clinics
  * Public endpoint (but we call it authenticated for consistency)
  */
-export const getCamps = async (): Promise<Camp[]> => {
-  const response = await apiClient.get<Camp[]>('/ptp/v1/camps');
+export interface GetCampsParams {
+  lat?: number;
+  lng?: number;
+  radius?: number;
+}
+
+export const getCamps = async (params?: GetCampsParams): Promise<Camp[]> => {
+  const response = await apiClient.get<Camp[]>('/ptp/v1/camps', {
+    params,
+  });
 
   // Defensive: ensure we always return an array
   if (!Array.isArray(response.data)) {
@@ -270,6 +279,14 @@ export const getSessions = async (): Promise<Session[]> => {
 };
 
 /**
+ * Get app-level configuration flags and banners
+ */
+export const getAppConfig = async (): Promise<AppConfig> => {
+  const response = await apiClient.get<AppConfig>('/ptp/v1/app-config');
+  return response.data;
+};
+
+/**
  * Register device for push notifications
  * Requires authentication
  */
@@ -301,7 +318,16 @@ const normalizeCamp = (raw: Partial<Camp>): Camp => {
     location: raw.location ?? '',
     state: raw.state ?? '',
     bestseller: Boolean(raw.bestseller),
-    almost_full: Boolean(raw.almost_full),
+    almost_full: Boolean(raw.almost_full || raw.isAlmostFull),
+    availableSeats: typeof raw.availableSeats === 'number'
+      ? raw.availableSeats
+      : typeof raw.availableSeats === 'string'
+      ? parseInt(raw.availableSeats, 10) || undefined
+      : undefined,
+    isAlmostFull: Boolean(raw.isAlmostFull ?? raw.almost_full),
+    isWaitlistOnly: Boolean(raw.isWaitlistOnly),
+    latitude: typeof raw.latitude === 'number' ? raw.latitude : undefined,
+    longitude: typeof raw.longitude === 'number' ? raw.longitude : undefined,
     product_url: raw.product_url,
     description: raw.description,
     category: raw.category ?? 'summer',

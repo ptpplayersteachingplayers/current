@@ -22,11 +22,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PrimaryButton } from '../components';
 import { colors, spacing, typography, borderRadius } from '../theme';
 import { TrainingStackParamList } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { ensureTrainerConversation } from '../api/chat';
 
 type Props = NativeStackScreenProps<TrainingStackParamList, 'TrainerDetail'>;
 
-const TrainerDetailScreen: React.FC<Props> = ({ route }) => {
+const TrainerDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const { trainer } = route.params;
+  const { user } = useAuth();
 
   const handleContact = () => {
     Alert.alert(
@@ -46,6 +49,25 @@ const TrainerDetailScreen: React.FC<Props> = ({ route }) => {
     );
   };
 
+  const handleMessageTrainer = async () => {
+    if (!user) {
+      Alert.alert('Sign in required', 'Please sign in to message your trainer.');
+      return;
+    }
+
+    const conversation = await ensureTrainerConversation(
+      String(user.id),
+      String(trainer.id),
+      undefined,
+      trainer.name
+    );
+
+    navigation.getParent()?.navigate('MessagesTab' as never, {
+      screen: 'Chat',
+      params: { conversationId: conversation.id, title: trainer.name },
+    } as never);
+  };
+
   const renderStars = (rating: number) => {
     const fullStars = Math.floor(rating);
     const hasHalfStar = rating % 1 >= 0.5;
@@ -53,9 +75,9 @@ const TrainerDetailScreen: React.FC<Props> = ({ route }) => {
 
     return (
       <Text style={styles.stars}>
-        {'?'.repeat(fullStars)}
-        {hasHalfStar ? '?' : ''}
-        {'?'.repeat(emptyStars)}
+        {'★'.repeat(fullStars)}
+        {hasHalfStar ? '☆' : ''}
+        {'☆'.repeat(emptyStars)}
       </Text>
     );
   };
@@ -182,11 +204,17 @@ const TrainerDetailScreen: React.FC<Props> = ({ route }) => {
             <Text style={styles.bottomSubtitle}>Contact PTP to book</Text>
           </View>
           <PrimaryButton
-            title="Contact PTP"
-            onPress={handleContact}
+            title="Message this Trainer"
+            onPress={handleMessageTrainer}
             style={styles.contactButton}
           />
         </View>
+        <PrimaryButton
+          title="Contact PTP"
+          onPress={handleContact}
+          variant="outline"
+          style={styles.secondaryCta}
+        />
       </View>
     </SafeAreaView>
   );
@@ -371,6 +399,9 @@ const styles = StyleSheet.create({
   },
   contactButton: {
     minWidth: 140,
+  },
+  secondaryCta: {
+    marginTop: spacing.sm,
   },
 });
 

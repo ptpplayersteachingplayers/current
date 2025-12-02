@@ -45,6 +45,11 @@ export interface Camp {
   state: StateCode;
   bestseller: boolean;
   almost_full: boolean;
+  availableSeats?: number;
+  isAlmostFull?: boolean;
+  isWaitlistOnly?: boolean;
+  latitude?: number;
+  longitude?: number;
   product_url?: string;
   description?: string;
   category: CampCategory;
@@ -82,6 +87,7 @@ export interface Session {
   location: string;
   trainer_name?: string;
   status: SessionStatus;
+  conversation_id?: string;
 }
 
 export type SessionType = 'camp' | 'clinic' | 'training';
@@ -119,6 +125,66 @@ export interface ApiResponse<T> {
 }
 
 // =============================================================================
+// App Config (WordPress driven)
+// =============================================================================
+
+export interface AppFeatureFlags {
+  enablePrivateTraining?: boolean;
+  enableMessaging?: boolean;
+}
+
+export interface AppBanner {
+  id: string;
+  title: string;
+  body: string;
+  ctaText: string;
+  url: string;
+}
+
+export interface AppConfig {
+  minSupportedAppVersion: string;
+  features: AppFeatureFlags;
+  banners: AppBanner[];
+}
+
+// =============================================================================
+// Messaging (Supabase)
+// =============================================================================
+
+export type UserRoleType = 'parent' | 'trainer' | 'support';
+
+export interface ChatUser {
+  id: string;
+  wp_user_id?: number;
+  name: string;
+  role: UserRoleType;
+}
+
+export type ConversationType = 'parent-trainer' | 'parent-support' | 'group';
+
+export interface Conversation {
+  id: string;
+  type: ConversationType;
+  participant_ids: string[];
+  camp_id?: string | null;
+  created_at?: string;
+  last_message_text?: string;
+  last_message_at?: string;
+  title?: string;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  text: string;
+  created_at: string;
+  seen_by?: string[];
+  is_system?: boolean;
+  optimistic?: boolean;
+}
+
+// =============================================================================
 // Navigation Types
 // =============================================================================
 
@@ -132,9 +198,11 @@ export type AuthStackParamList = {
 };
 
 export type MainTabParamList = {
+  HomeTab: undefined;
   CampsTab: undefined;
   TrainingTab: undefined;
   ScheduleTab: undefined;
+  MessagesTab: undefined;
   ProfileTab: undefined;
 };
 
@@ -146,6 +214,11 @@ export type CampsStackParamList = {
 export type TrainingStackParamList = {
   Trainers: undefined;
   TrainerDetail: { trainer: Trainer };
+};
+
+export type MessagesStackParamList = {
+  ChatList: undefined;
+  Chat: { conversationId: string; title?: string };
 };
 
 // =============================================================================

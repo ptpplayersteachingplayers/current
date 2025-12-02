@@ -8,7 +8,16 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "eslint . --ext .ts,.tsx",
-    "type-check": "tsc --noEmit"
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"App.tsx\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"App.tsx\"",
+    "type-check": "tsc --noEmit",
+    "check": "npm run type-check && npm run lint",
+    "generate-assets": "node scripts/generate-assets.js",
+    "prebuild": "expo prebuild",
+    "build:dev": "eas build --profile development",
+    "build:preview": "eas build --profile preview",
+    "build:prod": "eas build --profile production"
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^6.5.11",
@@ -31,9 +40,15 @@
   "devDependencies": {
     "@babel/core": "^7.20.0",
     "@types/react": "~18.2.45",
-    "@typescript-eslint/eslint-plugin": "^6.14.0",
-    "@typescript-eslint/parser": "^6.14.0",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "babel-plugin-module-resolver": "^5.0.2",
     "eslint": "^8.55.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "prettier": "^3.7.3",
     "typescript": "^5.1.3"
   },
   "private": true

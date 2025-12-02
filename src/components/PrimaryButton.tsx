@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   ViewStyle,
   TextStyle,
+  StyleProp,
 } from 'react-native';
 import { colors, spacing, borderRadius, typography } from '../theme';
 
@@ -16,8 +17,8 @@ interface PrimaryButtonProps {
   disabled?: boolean;
   variant?: 'primary' | 'secondary' | 'outline';
   size?: 'sm' | 'md' | 'lg';
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
 }
 
 export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
@@ -32,59 +33,69 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
 }) => {
   const isDisabled = disabled || loading;
 
-  const getButtonStyle = (): ViewStyle[] => {
-    const baseStyle = [styles.button, styles[`button_${size}`]];
-
-    switch (variant) {
-      case 'secondary':
-        baseStyle.push(styles.buttonSecondary);
-        break;
-      case 'outline':
-        baseStyle.push(styles.buttonOutline);
-        break;
+  const getSizeStyle = () => {
+    switch (size) {
+      case 'sm':
+        return styles.button_sm;
+      case 'md':
+        return styles.button_md;
       default:
-        baseStyle.push(styles.buttonPrimary);
+        return styles.button_lg;
     }
-
-    if (isDisabled) {
-      baseStyle.push(styles.buttonDisabled);
-    }
-
-    if (style) {
-      baseStyle.push(style);
-    }
-
-    return baseStyle;
   };
 
-  const getTextStyle = (): TextStyle[] => {
-    const baseTextStyle = [styles.buttonText, styles[`buttonText_${size}`]];
-
+  const getVariantStyle = () => {
     switch (variant) {
       case 'secondary':
-        baseTextStyle.push(styles.buttonTextSecondary);
-        break;
+        return styles.buttonSecondary;
       case 'outline':
-        baseTextStyle.push(styles.buttonTextOutline);
-        break;
+        return styles.buttonOutline;
       default:
-        baseTextStyle.push(styles.buttonTextPrimary);
+        return styles.buttonPrimary;
     }
-
-    if (isDisabled) {
-      baseTextStyle.push(styles.buttonTextDisabled);
-    }
-
-    if (textStyle) {
-      baseTextStyle.push(textStyle);
-    }
-
-    return baseTextStyle;
   };
+
+  const getTextSizeStyle = () => {
+    switch (size) {
+      case 'sm':
+        return styles.buttonText_sm;
+      case 'md':
+        return styles.buttonText_md;
+      default:
+        return styles.buttonText_lg;
+    }
+  };
+
+  const getTextVariantStyle = () => {
+    switch (variant) {
+      case 'secondary':
+        return styles.buttonTextSecondary;
+      case 'outline':
+        return styles.buttonTextOutline;
+      default:
+        return styles.buttonTextPrimary;
+    }
+  };
+
+  const buttonStyles: StyleProp<ViewStyle> = [
+    styles.button,
+    getSizeStyle(),
+    getVariantStyle(),
+    isDisabled && styles.buttonDisabled,
+    style,
+  ];
+
+  const textStyles: StyleProp<TextStyle> = [
+    styles.buttonText,
+    getTextSizeStyle(),
+    getTextVariantStyle(),
+    isDisabled && styles.buttonTextDisabled,
+    textStyle,
+  ];
 
   return (
     <TouchableOpacity
-      style={getButtonStyle()}
+      style={buttonStyles}
       onPress={onPress}
       disabled={isDisabled}
       activeOpacity={0.8}
@@ -95,7 +106,7 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
           size="small"
         />
       ) : (
-        <Text style={getTextStyle()}>{title}</Text>
+        <Text style={textStyles}>{title}</Text>
       )}
     </TouchableOpacity>
   );

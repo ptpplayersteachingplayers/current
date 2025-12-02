@@ -21,7 +21,7 @@ import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { getSessions, ApiClientError } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { Card, LoadingScreen, ErrorState, EmptyState, Badge, PrimaryButton } from '../components';
+import { Card, LoadingScreen, ErrorState, Badge, PrimaryButton } from '../components';
 import { colors, spacing, typography, borderRadius } from '../theme';
 import { Session, MainTabParamList } from '../types';
 

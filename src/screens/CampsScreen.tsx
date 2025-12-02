@@ -22,7 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { getCamps, ApiClientError } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { Card, Badge, LoadingScreen, ErrorState, EmptyState } from '../components';
-import { colors, spacing, typography, borderRadius } from '../theme';
+import { colors, spacing, typography } from '../theme';
 import { Camp, CampsStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<CampsStackParamList, 'Camps'>;

@@ -34,11 +34,13 @@ interface AuthState {
   user: User | null;
   isLoading: boolean;
   isInitialized: boolean;
+  isGuest: boolean;
 }
 
 interface AuthContextValue extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => Promise<void>;
+  continueAsGuest: () => void;
 }
 
 // =============================================================================
@@ -60,6 +62,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user: null,
     isLoading: false,
     isInitialized: false,
+    isGuest: false,
   });
 
   /**
@@ -78,6 +81,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               user,
               isLoading: false,
               isInitialized: true,
+              isGuest: false,
             });
 
           } catch (error) {
@@ -88,6 +92,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               user: null,
               isLoading: false,
               isInitialized: true,
+              isGuest: false,
             });
           }
         } else {
@@ -96,6 +101,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             user: null,
             isLoading: false,
             isInitialized: true,
+            isGuest: false,
           });
         }
       } catch (error) {
@@ -104,6 +110,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           user: null,
           isLoading: false,
           isInitialized: true,
+          isGuest: false,
         });
       }
     };
@@ -131,6 +138,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         user,
         isLoading: false,
         isInitialized: true,
+        isGuest: false,
       });
 
     } catch (error) {
@@ -168,14 +176,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         user: null,
         isLoading: false,
         isInitialized: true,
+        isGuest: false,
       });
     }
+  }, []);
+
+  /**
+   * Continue as guest - allow browsing without login
+   */
+  const continueAsGuest = useCallback((): void => {
+    setState({
+      user: null,
+      isLoading: false,
+      isInitialized: true,
+      isGuest: true,
+    });
   }, []);
 
   const value: AuthContextValue = {
     ...state,
     login,
     logout,
+    continueAsGuest,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -33,11 +33,11 @@ interface SectionData {
 }
 
 const ScheduleScreen: React.FC = () => {
-  const { logout } = useAuth();
+  const { logout, isGuest, user } = useAuth();
   const navigation = useNavigation<ScheduleNavigationProp>();
 
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!isGuest);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,8 +70,10 @@ const ScheduleScreen: React.FC = () => {
   }, [logout]);
 
   useEffect(() => {
-    fetchSessions();
-  }, [fetchSessions]);
+    if (!isGuest && user) {
+      fetchSessions();
+    }
+  }, [fetchSessions, isGuest, user]);
 
   const handleRefresh = () => {
     fetchSessions(true);
@@ -190,6 +192,34 @@ const ScheduleScreen: React.FC = () => {
       </Text>
     </View>
   );
+
+  // Guest view - prompt to login
+  if (isGuest && !user) {
+    return (
+      <View style={styles.guestContainer}>
+        <View style={styles.guestIconContainer}>
+          <Text style={styles.guestIcon}>📅</Text>
+        </View>
+        <Text style={styles.guestTitle}>Sign In to View Schedule</Text>
+        <Text style={styles.guestSubtitle}>
+          Sign in to see your registered camps, clinics, and training sessions.
+        </Text>
+        <PrimaryButton
+          title="Sign In"
+          onPress={logout}
+          style={styles.guestSignInButton}
+        />
+        <View style={styles.guestBrowseButtons}>
+          <PrimaryButton
+            title="Browse Camps"
+            onPress={handleBrowseCamps}
+            variant="outline"
+            style={styles.guestBrowseButton}
+          />
+        </View>
+      </View>
+    );
+  }
 
   // Loading state
   if (isLoading && !isRefreshing) {
@@ -385,6 +415,51 @@ const styles = StyleSheet.create({
     maxWidth: 280,
   },
   emptyButton: {
+    marginBottom: spacing.md,
+  },
+
+  // Guest Styles
+  guestContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xxl,
+    backgroundColor: colors.white,
+  },
+  guestIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: colors.offWhite,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xl,
+  },
+  guestIcon: {
+    fontSize: 48,
+  },
+  guestTitle: {
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
+    color: colors.ink,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  guestSubtitle: {
+    fontSize: typography.sizes.md,
+    color: colors.gray,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+    lineHeight: 24,
+  },
+  guestSignInButton: {
+    width: '100%',
+    marginBottom: spacing.lg,
+  },
+  guestBrowseButtons: {
+    width: '100%',
+  },
+  guestBrowseButton: {
     marginBottom: spacing.md,
   },
 });

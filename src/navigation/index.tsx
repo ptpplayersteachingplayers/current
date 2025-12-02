@@ -265,7 +265,7 @@ const MainTabs: React.FC = () => {
 // =============================================================================
 
 const RootNavigator: React.FC = () => {
-  const { user, isInitialized } = useAuth();
+  const { user, isInitialized, isGuest } = useAuth();
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
 
   // Check if onboarding has been completed
@@ -289,7 +289,7 @@ const RootNavigator: React.FC = () => {
 
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
-      {user ? (
+      {user || isGuest ? (
         <RootStack.Screen name="Main" component={MainTabs} />
       ) : (
         <RootStack.Screen name="Auth" component={AuthStack} />

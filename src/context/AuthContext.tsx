@@ -24,7 +24,6 @@ import {
   loadStoredToken,
   ApiClientError,
 } from '../api/client';
-import { registerDeviceToken } from '../utils/notifications';
 import { User, LoginCredentials } from '../types';
 
 // =============================================================================
@@ -35,11 +34,13 @@ interface AuthState {
   user: User | null;
   isLoading: boolean;
   isInitialized: boolean;
+  isGuest: boolean;
 }
 
 interface AuthContextValue extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => Promise<void>;
+  continueAsGuest: () => void;
 }
 
 // =============================================================================
@@ -61,6 +62,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user: null,
     isLoading: false,
     isInitialized: false,
+    isGuest: false,
   });
 
   /**
@@ -79,11 +81,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               user,
               isLoading: false,
               isInitialized: true,
+              isGuest: false,
             });
 
-            // Re-register device for push notifications
-            // (token may have changed or expired on server)
-            registerDeviceToken().catch(console.error);
           } catch (error) {
             // Token is invalid or expired, clear it
             console.log('Stored token invalid, clearing...');
@@ -92,6 +92,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               user: null,
               isLoading: false,
               isInitialized: true,
+              isGuest: false,
             });
           }
         } else {
@@ -100,6 +101,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             user: null,
             isLoading: false,
             isInitialized: true,
+            isGuest: false,
           });
         }
       } catch (error) {
@@ -108,6 +110,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           user: null,
           isLoading: false,
           isInitialized: true,
+          isGuest: false,
         });
       }
     };
@@ -135,10 +138,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         user,
         isLoading: false,
         isInitialized: true,
+        isGuest: false,
       });
 
-      // Register device for push notifications (fire and forget)
-      registerDeviceToken().catch(console.error);
     } catch (error) {
       setState((prev) => ({ ...prev, isLoading: false }));
 
@@ -174,14 +176,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         user: null,
         isLoading: false,
         isInitialized: true,
+        isGuest: false,
       });
     }
+  }, []);
+
+  /**
+   * Continue as guest - allow browsing without login
+   */
+  const continueAsGuest = useCallback((): void => {
+    setState({
+      user: null,
+      isLoading: false,
+      isInitialized: true,
+      isGuest: true,
+    });
   }, []);
 
   const value: AuthContextValue = {
     ...state,
     login,
     logout,
+    continueAsGuest,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

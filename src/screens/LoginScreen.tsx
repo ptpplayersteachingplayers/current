@@ -34,7 +34,7 @@ import { LOGO, SCREEN_IMAGES } from '../constants/images';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const LoginScreen: React.FC = () => {
-  const { login, isLoading } = useAuth();
+  const { login, isLoading, continueAsGuest } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -166,6 +166,15 @@ const LoginScreen: React.FC = () => {
               disabled={isLoading}
               style={styles.loginButton}
             />
+
+            {/* Continue as Guest Button */}
+            <TouchableOpacity
+              style={styles.guestButton}
+              onPress={continueAsGuest}
+              disabled={isLoading}
+            >
+              <Text style={styles.guestButtonText}>Continue as Guest</Text>
+            </TouchableOpacity>
 
             {/* Forgot Password Link */}
             <TouchableOpacity
@@ -302,6 +311,22 @@ const styles = StyleSheet.create({
   // Button
   loginButton: {
     marginTop: spacing.md,
+  },
+
+  // Guest Button
+  guestButton: {
+    alignItems: 'center',
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.white,
+  },
+  guestButtonText: {
+    fontSize: typography.sizes.md,
+    color: colors.ink,
+    fontWeight: typography.weights.medium,
   },
 
   // Forgot Password

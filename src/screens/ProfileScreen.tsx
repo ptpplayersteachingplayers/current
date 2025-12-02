@@ -25,7 +25,7 @@ import { Card, PrimaryButton } from '../components';
 import { colors, spacing, typography, borderRadius } from '../theme';
 
 const ProfileScreen: React.FC = () => {
-  const { user, logout, isLoading } = useAuth();
+  const { user, logout, isLoading, isGuest } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = () => {
@@ -81,6 +81,31 @@ const ProfileScreen: React.FC = () => {
     }
     return name.substring(0, 2).toUpperCase();
   };
+
+  // Guest view - prompt to login
+  if (isGuest && !user) {
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+        <View style={styles.guestContainer}>
+          <View style={styles.guestIconContainer}>
+            <Text style={styles.guestIcon}>👤</Text>
+          </View>
+          <Text style={styles.guestTitle}>Sign In to View Profile</Text>
+          <Text style={styles.guestSubtitle}>
+            Create an account or sign in to access your profile, view your schedule, and manage your camps.
+          </Text>
+          <PrimaryButton
+            title="Sign In"
+            onPress={logout}
+            style={styles.guestButton}
+          />
+          <TouchableOpacity onPress={handleVisitWebsite} style={styles.guestLink}>
+            <Text style={styles.guestLinkText}>Create an account at ptpsummercamps.com</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -318,6 +343,53 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: typography.sizes.xs,
     color: colors.grayLight,
+  },
+
+  // Guest Styles
+  guestContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xxl,
+    backgroundColor: colors.white,
+  },
+  guestIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: colors.offWhite,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xl,
+  },
+  guestIcon: {
+    fontSize: 48,
+  },
+  guestTitle: {
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
+    color: colors.ink,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  guestSubtitle: {
+    fontSize: typography.sizes.md,
+    color: colors.gray,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+    lineHeight: 24,
+  },
+  guestButton: {
+    width: '100%',
+    marginBottom: spacing.lg,
+  },
+  guestLink: {
+    padding: spacing.sm,
+  },
+  guestLinkText: {
+    fontSize: typography.sizes.sm,
+    color: colors.primary,
+    textDecorationLine: 'underline',
   },
 });
 

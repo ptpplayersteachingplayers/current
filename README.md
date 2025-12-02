@@ -74,10 +74,12 @@ PTP Soccer allows parents to:
 
 ### Installation
 
-1. Clone the repository:
+1. Clone the repository **and make sure you are inside the folder that contains `package.json`** (Windows zip extractions sometimes add an extra top-level folder):
 ```bash
 git clone <repository-url>
+# If you downloaded a .zip, open it and ensure you `cd` into the folder where package.json lives
 cd ptp-mobile-app
+dir /b   # (Windows) confirm package.json is listed here
 ```
 
 2. Install dependencies:
@@ -91,6 +93,15 @@ npm start
 ```
 
 4. Scan the QR code with Expo Go (Android) or Camera app (iOS)
+
+### If you see `PlatformConstants` or TurboModule errors in Expo Go
+
+These errors almost always mean your local React Native version does not match the Expo SDK bundled in Expo Go. Fixes:
+
+1. Verify dependencies are pinned to Expo SDK 54 (see `package.json` — `react-native@0.77.x`, `react@18.3.x`, `expo@~54.0.0`).
+2. Re-install modules after updating: `npm install --legacy-peer-deps`.
+3. Clear caches before starting Metro: `npx expo start -c`.
+4. If you previously unzipped the project into another folder, ensure you run commands from the folder that actually contains `package.json`.
 
 ### WordPress Setup
 

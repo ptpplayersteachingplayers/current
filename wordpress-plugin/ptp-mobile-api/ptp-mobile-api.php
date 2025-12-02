@@ -3,7 +3,7 @@
  * Plugin Name: PTP Mobile API
  * Plugin URI: https://ptpsummercamps.com
  * Description: REST API endpoints for the PTP Soccer Camps mobile app
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Players Teaching Players
  * Author URI: https://ptpsummercamps.com
  * License: GPL v2 or later
@@ -22,7 +22,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin version
-define('PTP_MOBILE_API_VERSION', '1.0.0');
+define('PTP_MOBILE_API_VERSION', '1.1.0');
 
 // Plugin directory path
 define('PTP_MOBILE_API_PATH', plugin_dir_path(__FILE__));
@@ -104,6 +104,30 @@ class PTP_Mobile_API {
     }
 
     /**
+     * Sanitize float request params
+     */
+    private function sanitize_float_param($request, $key) {
+        $value = $request->get_param($key);
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return is_numeric($value) ? (float) $value : null;
+    }
+
+    /**
+     * Calculate distance in miles between two coordinates using Haversine formula
+     */
+    private function calculate_distance_miles($lat1, $lon1, $lat2, $lon2) {
+        $earth_radius = 3958.8; // miles
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+        $a = sin($dLat / 2) * sin($dLat / 2) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) * sin($dLon / 2);
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+        return $earth_radius * $c;
+    }
+
+    /**
      * Add CORS headers for mobile app requests
      */
     public function add_cors_headers() {
@@ -134,6 +158,13 @@ class PTP_Mobile_API {
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => array($this, 'get_camps'),
             'permission_callback' => '__return_true', // Public endpoint
+        ));
+
+        // GET /ptp/v1/app-config - Dynamic app configuration for the mobile app
+        register_rest_route($this->namespace, '/app-config', array(
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => array($this, 'get_app_config'),
+            'permission_callback' => '__return_true',
         ));
 
         // GET /ptp/v1/trainers - Get list of trainers
@@ -243,6 +274,10 @@ class PTP_Mobile_API {
             );
         }
 
+        $lat = $this->sanitize_float_param($request, 'lat');
+        $lng = $this->sanitize_float_param($request, 'lng');
+        $radius = $this->sanitize_float_param($request, 'radius');
+
         // Query products in summer or winter-clinics categories
         $args = array(
             'post_type'      => 'product',
@@ -285,25 +320,75 @@ class PTP_Mobile_API {
             $camp_state = get_post_meta($product->ID, '_camp_state', true);
             $bestseller = get_post_meta($product->ID, '_bestseller', true);
             $almost_full = get_post_meta($product->ID, '_almost_full', true);
+            $camp_lat = get_post_meta($product->ID, '_camp_lat', true);
+            $camp_lng = get_post_meta($product->ID, '_camp_lng', true);
+            $available_seats = get_post_meta($product->ID, '_available_seats', true);
+            $is_waitlist_only = get_post_meta($product->ID, '_is_waitlist_only', true);
+
+            // If geo filters are provided, skip camps outside the radius
+            if ($lat !== null && $lng !== null && $radius !== null && $camp_lat && $camp_lng) {
+                $distance = $this->calculate_distance_miles($lat, $lng, (float) $camp_lat, (float) $camp_lng);
+                if ($distance > $radius) {
+                    continue;
+                }
+            }
 
             $camps[] = array(
-                'id'          => $product->ID,
-                'name'        => $wc_product->get_name(),
-                'image'       => $image_url,
-                'price'       => $wc_product->get_price_html() ? wp_strip_all_tags($wc_product->get_price_html()) : '$' . $wc_product->get_price(),
-                'date'        => $camp_date ?: '',
-                'time'        => $camp_time ?: '',
-                'location'    => $camp_location ?: '',
-                'state'       => $camp_state ?: '',
-                'bestseller'  => $bestseller === 'yes',
-                'almost_full' => $almost_full === 'yes',
-                'product_url' => get_permalink($product->ID),
-                'description' => $wc_product->get_short_description(),
-                'category'    => $category,
+                'id'              => $product->ID,
+                'name'            => $wc_product->get_name(),
+                'image'           => $image_url,
+                'price'           => $wc_product->get_price_html()
+                    ? wp_strip_all_tags($wc_product->get_price_html())
+                    : '$' . $wc_product->get_price(),
+                'date'            => $camp_date ?: '',
+                'time'            => $camp_time ?: '',
+                'location'        => $camp_location ?: '',
+                'state'           => $camp_state ?: '',
+                'bestseller'      => $bestseller === 'yes',
+                'almost_full'     => $almost_full === 'yes',
+                'availableSeats'  => $available_seats !== '' ? (int) $available_seats : null,
+                'isAlmostFull'    => $almost_full === 'yes',
+                'isWaitlistOnly'  => $is_waitlist_only === 'yes',
+                'latitude'        => $camp_lat !== '' ? (float) $camp_lat : null,
+                'longitude'       => $camp_lng !== '' ? (float) $camp_lng : null,
+                'product_url'     => get_permalink($product->ID),
+                'description'     => $wc_product->get_short_description(),
+                'category'        => $category,
             );
         }
 
         return rest_ensure_response($camps);
+    }
+
+    /**
+     * GET /ptp/v1/app-config
+     *
+     * Returns dynamic configuration for the mobile app (feature flags, banners)
+     */
+    public function get_app_config($request) {
+        $config = array(
+            'minSupportedAppVersion' => '1.0.0',
+            'features' => array(
+                'enablePrivateTraining' => true,
+                'enableMessaging'      => true,
+            ),
+            'banners' => array(
+                array(
+                    'id'       => 'winter-clinic',
+                    'title'    => 'Winter Clinics Near You',
+                    'body'     => '3 hours, 500 touches, no lines.',
+                    'ctaText'  => 'Find a Clinic',
+                    'url'      => 'https://ptpsummercamps.com/winter',
+                ),
+            ),
+        );
+
+        /**
+         * Allow site admins to filter the mobile app configuration.
+         */
+        $config = apply_filters('ptp_mobile_app_config', $config, $request);
+
+        return rest_ensure_response($config);
     }
 
     /**

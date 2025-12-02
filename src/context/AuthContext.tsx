@@ -25,6 +25,7 @@ import {
   ApiClientError,
 } from '../api/client';
 import { User, LoginCredentials } from '../types';
+import queryClient from '../api/queryClient';
 
 // =============================================================================
 // Types
@@ -169,6 +170,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = useCallback(async (): Promise<void> => {
     try {
       await clearAuthToken();
+      queryClient.clear();
     } catch (error) {
       console.error('Error clearing token:', error);
     } finally {

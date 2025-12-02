@@ -1,14 +1,10 @@
 /**
  * PTP Mobile App - Schedule Screen
  *
- * Features:
- * - User's upcoming and past sessions
- * - Grouped by date
- * - Loading, error, and empty states
- * - Pull to refresh
+ * React Query driven schedule with chat entry points.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,11 +15,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { getSessions, ApiClientError } from '../api/client';
+import { useSessionsQuery } from '../api/queries';
 import { useAuth } from '../context/AuthContext';
 import { Card, LoadingScreen, ErrorState, Badge, PrimaryButton } from '../components';
 import { colors, spacing, typography, borderRadius } from '../theme';
 import { Session, MainTabParamList } from '../types';
+import { ensureSupportConversation } from '../api/chat';
 
 type ScheduleNavigationProp = BottomTabNavigationProp<MainTabParamList, 'ScheduleTab'>;
 
@@ -36,47 +33,24 @@ const ScheduleScreen: React.FC = () => {
   const { logout, isGuest, user } = useAuth();
   const navigation = useNavigation<ScheduleNavigationProp>();
 
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [isLoading, setIsLoading] = useState(!isGuest);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: sessions = [],
+    isLoading,
+    isError,
+    error,
+    isRefetching,
+    refetch,
+  } = useSessionsQuery(Boolean(user) && !isGuest);
 
-  const fetchSessions = useCallback(async (showRefresh = false) => {
-    if (showRefresh) {
-      setIsRefreshing(true);
-    } else {
-      setIsLoading(true);
-    }
-    setError(null);
+  const typedError = useMemo(() => {
+    if (error && error instanceof Error) return error;
+    return null;
+  }, [error]);
 
-    try {
-      const data = await getSessions();
-      setSessions(data);
-    } catch (err) {
-      if (err instanceof ApiClientError && err.isSessionExpired()) {
-        await logout();
-        return;
-      }
-
-      const message =
-        err instanceof Error
-          ? err.message
-          : 'Failed to load your schedule. Please try again.';
-      setError(message);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [logout]);
-
-  useEffect(() => {
-    if (!isGuest && user) {
-      fetchSessions();
-    }
-  }, [fetchSessions, isGuest, user]);
+  const errorMessage = typedError?.message || 'Failed to load your schedule. Please try again.';
 
   const handleRefresh = () => {
-    fetchSessions(true);
+    refetch();
   };
 
   const handleBrowseCamps = () => {
@@ -87,11 +61,21 @@ const ScheduleScreen: React.FC = () => {
     navigation.navigate('TrainingTab');
   };
 
-  // Group sessions by date
+  const handleChat = async (session: Session) => {
+    if (!user) return;
+    try {
+      const conversation = await ensureSupportConversation(String(user.id), user.name);
+      navigation.navigate('MessagesTab', {
+        screen: 'Chat',
+        params: { conversationId: conversation.id, title: session.name },
+      } as any);
+    } catch (err) {
+      console.warn('Unable to open conversation', err);
+    }
+  };
+
   const groupSessionsByDate = (sessionList: Session[]): SectionData[] => {
     const grouped: { [key: string]: Session[] } = {};
-
-    // Sort sessions by date (upcoming first)
     const sorted = [...sessionList].sort((a, b) => {
       const dateA = new Date(a.date);
       const dateB = new Date(b.date);
@@ -138,12 +122,8 @@ const ScheduleScreen: React.FC = () => {
 
   const renderSessionItem = ({ item }: { item: Session }) => (
     <Card style={styles.sessionCard}>
-      {/* Header */}
       <View style={styles.sessionHeader}>
-        <Badge
-          label={getSessionTypeLabel(item.type)}
-          variant="info"
-        />
+        <Badge label={getSessionTypeLabel(item.type)} variant="info" />
         {item.status !== 'upcoming' && (
           <Badge
             label={item.status.charAt(0).toUpperCase() + item.status.slice(1)}
@@ -153,34 +133,41 @@ const ScheduleScreen: React.FC = () => {
         )}
       </View>
 
-      {/* Session Name */}
       <Text style={styles.sessionName} numberOfLines={2}>
         {item.name}
       </Text>
 
-      {/* Details */}
       <View style={styles.detailsContainer}>
         {item.time && (
           <View style={styles.detailRow}>
-            <Text style={styles.detailIcon}>?</Text>
+            <Text style={styles.detailIcon}>⏰</Text>
             <Text style={styles.detailText}>{item.time}</Text>
           </View>
         )}
 
         {item.location && (
           <View style={styles.detailRow}>
-            <Text style={styles.detailIcon}>?</Text>
+            <Text style={styles.detailIcon}>📍</Text>
             <Text style={styles.detailText}>{item.location}</Text>
           </View>
         )}
 
         {item.trainer_name && (
           <View style={styles.detailRow}>
-            <Text style={styles.detailIcon}>?</Text>
+            <Text style={styles.detailIcon}>🎯</Text>
             <Text style={styles.detailText}>Coach: {item.trainer_name}</Text>
           </View>
         )}
       </View>
+
+      {user && (
+        <PrimaryButton
+          title="Chat about this session"
+          onPress={() => handleChat(item)}
+          variant="outline"
+          style={styles.chatButton}
+        />
+      )}
     </Card>
   );
 
@@ -193,7 +180,6 @@ const ScheduleScreen: React.FC = () => {
     </View>
   );
 
-  // Guest view - prompt to login
   if (isGuest && !user) {
     return (
       <View style={styles.guestContainer}>
@@ -221,28 +207,23 @@ const ScheduleScreen: React.FC = () => {
     );
   }
 
-  // Loading state
-  if (isLoading && !isRefreshing) {
+  if (isLoading && !isRefetching) {
     return <LoadingScreen message="Loading your schedule..." />;
   }
 
-  // Error state
-  if (error && sessions.length === 0) {
-    return (
-      <ErrorState
-        message={error}
-        onRetry={() => fetchSessions()}
-      />
-    );
+  if (isError && sessions.length === 0) {
+    if ((typedError as any)?.isSessionExpired?.()) {
+      logout();
+    }
+    return <ErrorState message={errorMessage} onRetry={() => refetch()} />;
   }
 
-  // Empty state
   if (!isLoading && sessions.length === 0) {
     return (
       <View style={styles.emptyContainer}>
         <View style={styles.emptyContent}>
           <View style={styles.emptyIconContainer}>
-            <Text style={styles.emptyIcon}>?</Text>
+            <Text style={styles.emptyIcon}>⚽</Text>
           </View>
           <Text style={styles.emptyTitle}>No Upcoming Events</Text>
           <Text style={styles.emptyMessage}>
@@ -281,7 +262,7 @@ const ScheduleScreen: React.FC = () => {
         stickySectionHeadersEnabled={false}
         refreshControl={
           <RefreshControl
-            refreshing={isRefreshing}
+            refreshing={isRefetching}
             onRefresh={handleRefresh}
             tintColor={colors.primary}
             colors={[colors.primary]}
@@ -308,8 +289,6 @@ const styles = StyleSheet.create({
   sectionSeparator: {
     height: spacing.sm,
   },
-
-  // Section Header
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -327,8 +306,6 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.gray,
   },
-
-  // Session Card
   sessionCard: {
     padding: spacing.lg,
   },
@@ -346,8 +323,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     lineHeight: typography.sizes.md * typography.lineHeights.tight,
   },
-
-  // Details
   detailsContainer: {
     backgroundColor: colors.offWhite,
     borderRadius: borderRadius.md,
@@ -369,8 +344,9 @@ const styles = StyleSheet.create({
     color: colors.gray,
     flex: 1,
   },
-
-  // Empty State
+  chatButton: {
+    marginTop: spacing.md,
+  },
   emptyContainer: {
     flex: 1,
     backgroundColor: colors.offWhite,
@@ -417,8 +393,6 @@ const styles = StyleSheet.create({
   emptyButton: {
     marginBottom: spacing.md,
   },
-
-  // Guest Styles
   guestContainer: {
     flex: 1,
     justifyContent: 'center',

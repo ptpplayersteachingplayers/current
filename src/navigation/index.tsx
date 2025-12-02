@@ -4,9 +4,10 @@
  * Structure:
  * - RootNavigator: Onboarding -> Auth vs Main (based on user state)
  * - AuthStack: Login screen
- * - MainTabs: Camps, Training, Schedule, Profile
+ * - MainTabs: Home, Camps, Training, Schedule, Messages, Profile
  * - CampsStack: Camps list -> Camp detail
  * - TrainingStack: Trainers list -> Trainer detail
+ * - MessagesStack: Chat list -> Chat detail
  */
 
 import React, { useState, useEffect } from 'react';
@@ -27,6 +28,9 @@ import TrainerDetailScreen from '../screens/TrainerDetailScreen';
 import ScheduleScreen from '../screens/ScheduleScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import OnboardingScreen, { checkOnboardingComplete } from '../screens/OnboardingScreen';
+import HomeScreen from '../screens/HomeScreen';
+import ChatListScreen from '../screens/ChatListScreen';
+import ChatScreen from '../screens/ChatScreen';
 
 // Types
 import {
@@ -35,6 +39,7 @@ import {
   MainTabParamList,
   CampsStackParamList,
   TrainingStackParamList,
+  MessagesStackParamList,
 } from '../types';
 
 // =============================================================================
@@ -46,6 +51,7 @@ const AuthStackNav = createNativeStackNavigator<AuthStackParamList>();
 const MainTab = createBottomTabNavigator<MainTabParamList>();
 const CampsStackNav = createNativeStackNavigator<CampsStackParamList>();
 const TrainingStackNav = createNativeStackNavigator<TrainingStackParamList>();
+const MessagesStackNav = createNativeStackNavigator<MessagesStackParamList>();
 
 // =============================================================================
 // Tab Icon Component
@@ -60,12 +66,16 @@ const TabIcon: React.FC<TabIconProps> = ({ label, focused }) => {
   // Simple text-based icons (can be replaced with vector icons later)
   const getIcon = (): string => {
     switch (label) {
+      case 'Home':
+        return '🏠';
       case 'Camps':
         return '⚽';
       case 'Training':
         return '🏃';
       case 'Schedule':
         return '📅';
+      case 'Messages':
+        return '💬';
       case 'Profile':
         return '👤';
       default:
@@ -173,12 +183,46 @@ const TrainingStack: React.FC = () => {
 };
 
 // =============================================================================
+// Messages Stack
+// =============================================================================
+
+const MessagesStack: React.FC = () => {
+  return (
+    <MessagesStackNav.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: colors.white,
+        },
+        headerTintColor: colors.ink,
+        headerTitleStyle: {
+          fontWeight: typography.weights.semibold,
+        },
+        headerShadowVisible: false,
+        headerBackTitleVisible: false,
+      }}
+    >
+      <MessagesStackNav.Screen
+        name="ChatList"
+        component={ChatListScreen}
+        options={{ title: 'Messages' }}
+      />
+      <MessagesStackNav.Screen
+        name="Chat"
+        component={ChatScreen}
+        options={{ title: 'Chat' }}
+      />
+    </MessagesStackNav.Navigator>
+  );
+};
+
+// =============================================================================
 // Main Tabs (Authenticated users)
 // =============================================================================
 
 const MainTabs: React.FC = () => {
   return (
     <MainTab.Navigator
+      initialRouteName="HomeTab"
       screenOptions={{
         tabBarStyle: {
           backgroundColor: colors.white,
@@ -196,6 +240,19 @@ const MainTabs: React.FC = () => {
         headerShown: false,
       }}
     >
+      <MainTab.Screen
+        name="HomeTab"
+        component={HomeScreen}
+        options={{
+          tabBarLabel: 'Home',
+          tabBarIcon: ({ focused }) => <TabIcon label="Home" focused={focused} />,
+          headerShown: true,
+          headerTitle: 'Home',
+          headerStyle: { backgroundColor: colors.white },
+          headerTitleStyle: { fontWeight: typography.weights.semibold },
+          headerTintColor: colors.ink,
+        }}
+      />
       <MainTab.Screen
         name="CampsTab"
         component={CampsStack}
@@ -234,6 +291,17 @@ const MainTabs: React.FC = () => {
             fontWeight: typography.weights.semibold,
           },
           headerShadowVisible: false,
+        }}
+      />
+      <MainTab.Screen
+        name="MessagesTab"
+        component={MessagesStack}
+        options={{
+          tabBarLabel: 'Messages',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon label="Messages" focused={focused} />
+          ),
+          headerShown: false,
         }}
       />
       <MainTab.Screen

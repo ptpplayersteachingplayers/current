@@ -1,14 +1,10 @@
 /**
  * PTP Mobile App - Trainers Screen
  *
- * Features:
- * - List of private trainers
- * - Trainer cards with photo, college, specialty
- * - Loading, error, and empty states
- * - Pull to refresh
+ * React Query powered trainer list with pull-to-refresh.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,7 +15,7 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getTrainers, ApiClientError } from '../api/client';
+import { useTrainersQuery } from '../api/queries';
 import { useAuth } from '../context/AuthContext';
 import { Card, LoadingScreen, ErrorState, EmptyState } from '../components';
 import { colors, spacing, typography, borderRadius } from '../theme';
@@ -30,49 +26,28 @@ type Props = NativeStackScreenProps<TrainingStackParamList, 'Trainers'>;
 const TrainersScreen: React.FC<Props> = ({ navigation }) => {
   const { logout } = useAuth();
 
-  const [trainers, setTrainers] = useState<Trainer[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: trainers = [],
+    isLoading,
+    isError,
+    error,
+    isRefetching,
+    refetch,
+  } = useTrainersQuery();
 
-  const fetchTrainers = useCallback(async (showRefresh = false) => {
-    if (showRefresh) {
-      setIsRefreshing(true);
-    } else {
-      setIsLoading(true);
-    }
-    setError(null);
+  const typedError = useMemo(() => {
+    if (error && error instanceof Error) return error;
+    return null;
+  }, [error]);
 
-    try {
-      const data = await getTrainers();
-      setTrainers(data);
-    } catch (err) {
-      if (err instanceof ApiClientError && err.isSessionExpired()) {
-        await logout();
-        return;
-      }
-
-      const message =
-        err instanceof Error
-          ? err.message
-          : 'Failed to load trainers. Please try again.';
-      setError(message);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [logout]);
-
-  useEffect(() => {
-    fetchTrainers();
-  }, [fetchTrainers]);
+  const errorMessage = typedError?.message || 'Failed to load trainers. Please try again.';
 
   const handleTrainerPress = (trainer: Trainer) => {
     navigation.navigate('TrainerDetail', { trainer });
   };
 
   const handleRefresh = () => {
-    fetchTrainers(true);
+    refetch();
   };
 
   const renderStars = (rating: number) => {
@@ -82,20 +57,16 @@ const TrainersScreen: React.FC<Props> = ({ navigation }) => {
 
     return (
       <Text style={styles.stars}>
-        {'?'.repeat(fullStars)}
-        {hasHalfStar ? '?' : ''}
-        {'?'.repeat(emptyStars)}
+        {'★'.repeat(fullStars)}
+        {hasHalfStar ? '☆' : ''}
+        {'☆'.repeat(emptyStars)}
       </Text>
     );
   };
 
   const renderTrainerCard = ({ item }: { item: Trainer }) => (
-    <Card
-      style={styles.trainerCard}
-      onPress={() => handleTrainerPress(item)}
-    >
+    <Card style={styles.trainerCard} onPress={() => handleTrainerPress(item)}>
       <View style={styles.cardContent}>
-        {/* Trainer Photo */}
         {item.photo ? (
           <Image
             source={{ uri: item.photo }}
@@ -110,7 +81,6 @@ const TrainersScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         )}
 
-        {/* Trainer Info */}
         <View style={styles.trainerInfo}>
           <Text style={styles.trainerName} numberOfLines={1}>
             {item.name}
@@ -125,7 +95,7 @@ const TrainersScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.detailsRow}>
             {item.city && (
               <View style={styles.detailItem}>
-                <Text style={styles.detailIcon}>?</Text>
+                <Text style={styles.detailIcon}>📍</Text>
                 <Text style={styles.detailText} numberOfLines={1}>
                   {item.city}
                 </Text>
@@ -142,52 +112,42 @@ const TrainersScreen: React.FC<Props> = ({ navigation }) => {
             </View>
           )}
 
-          {/* Rating */}
           {item.rating > 0 && (
             <View style={styles.ratingRow}>
               {renderStars(item.rating)}
-              <Text style={styles.ratingText}>
-                {item.rating.toFixed(1)}
-              </Text>
+              <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
             </View>
           )}
         </View>
 
-        {/* Arrow */}
-        <Text style={styles.arrow}>?</Text>
+        <Text style={styles.arrow}>›</Text>
       </View>
     </Card>
   );
 
-  // Loading state
-  if (isLoading && !isRefreshing) {
+  if (isLoading && !isRefetching) {
     return <LoadingScreen message="Loading trainers..." />;
   }
 
-  // Error state
-  if (error && trainers.length === 0) {
-    return (
-      <ErrorState
-        message={error}
-        onRetry={() => fetchTrainers()}
-      />
-    );
+  if (isError && trainers.length === 0) {
+    if ((typedError as any)?.isSessionExpired?.()) {
+      logout();
+    }
+    return <ErrorState message={errorMessage} onRetry={() => refetch()} />;
   }
 
-  // Empty state
   if (!isLoading && trainers.length === 0) {
     return (
       <EmptyState
         title="No Trainers Available"
         message="Private training is coming soon! Check back later for our roster of NCAA and pro trainers."
-        icon="?"
+        icon="🏃"
       />
     );
   }
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
-      {/* Header Info */}
       <View style={styles.headerInfo}>
         <Text style={styles.headerTitle}>Train with the Pros</Text>
         <Text style={styles.headerSubtitle}>
@@ -203,7 +163,7 @@ const TrainersScreen: React.FC<Props> = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={isRefreshing}
+            refreshing={isRefetching}
             onRefresh={handleRefresh}
             tintColor={colors.primary}
             colors={[colors.primary]}
@@ -220,8 +180,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.offWhite,
   },
-
-  // Header
   headerInfo: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
@@ -238,8 +196,6 @@ const styles = StyleSheet.create({
     color: colors.gray,
     lineHeight: typography.sizes.sm * typography.lineHeights.normal,
   },
-
-  // List
   listContent: {
     padding: spacing.lg,
     paddingTop: spacing.md,
@@ -247,8 +203,6 @@ const styles = StyleSheet.create({
   separator: {
     height: spacing.md,
   },
-
-  // Trainer Card
   trainerCard: {
     padding: spacing.md,
   },
@@ -256,8 +210,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-
-  // Photo
   trainerPhoto: {
     width: 72,
     height: 72,
@@ -274,8 +226,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.bold,
     color: colors.primary,
   },
-
-  // Info
   trainerInfo: {
     flex: 1,
     marginLeft: spacing.md,
@@ -291,8 +241,6 @@ const styles = StyleSheet.create({
     color: colors.gray,
     marginBottom: spacing.xs,
   },
-
-  // Details
   detailsRow: {
     flexDirection: 'row',
     marginBottom: spacing.xs,
@@ -309,8 +257,6 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xs,
     color: colors.gray,
   },
-
-  // Specialty
   specialtyContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -327,8 +273,6 @@ const styles = StyleSheet.create({
     color: colors.ink,
     flex: 1,
   },
-
-  // Rating
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -343,8 +287,6 @@ const styles = StyleSheet.create({
     color: colors.ink,
     marginLeft: spacing.xs,
   },
-
-  // Arrow
   arrow: {
     fontSize: 16,
     color: colors.gray,

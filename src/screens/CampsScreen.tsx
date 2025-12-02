@@ -1,14 +1,10 @@
 /**
  * PTP Mobile App - Camps Screen
  *
- * Features:
- * - List of camps and clinics
- * - Loading, error, and empty states
- * - Pull to refresh
- * - Badges for bestseller/almost full
+ * React Query powered camps list with pull-to-refresh and error handling.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,7 +15,7 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getCamps, ApiClientError } from '../api/client';
+import { useCampsQuery } from '../api/queries';
 import { useAuth } from '../context/AuthContext';
 import { Card, Badge, LoadingScreen, ErrorState, EmptyState } from '../components';
 import { colors, spacing, typography } from '../theme';
@@ -30,57 +26,32 @@ type Props = NativeStackScreenProps<CampsStackParamList, 'Camps'>;
 const CampsScreen: React.FC<Props> = ({ navigation }) => {
   const { logout } = useAuth();
 
-  const [camps, setCamps] = useState<Camp[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: camps = [],
+    isLoading,
+    isError,
+    error,
+    isRefetching,
+    refetch,
+  } = useCampsQuery();
 
-  const fetchCamps = useCallback(async (showRefresh = false) => {
-    if (showRefresh) {
-      setIsRefreshing(true);
-    } else {
-      setIsLoading(true);
-    }
-    setError(null);
+  const typedError = useMemo(() => {
+    if (error && error instanceof Error) return error;
+    return null;
+  }, [error]);
 
-    try {
-      const data = await getCamps();
-      setCamps(data);
-    } catch (err) {
-      if (err instanceof ApiClientError && err.isSessionExpired()) {
-        await logout();
-        return;
-      }
-
-      const message =
-        err instanceof Error
-          ? err.message
-          : 'Failed to load camps. Please try again.';
-      setError(message);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [logout]);
-
-  useEffect(() => {
-    fetchCamps();
-  }, [fetchCamps]);
+  const errorMessage = typedError?.message || 'Failed to load camps. Please try again.';
 
   const handleCampPress = (camp: Camp) => {
     navigation.navigate('CampDetail', { camp });
   };
 
   const handleRefresh = () => {
-    fetchCamps(true);
+    refetch();
   };
 
   const renderCampCard = ({ item }: { item: Camp }) => (
-    <Card
-      style={styles.campCard}
-      onPress={() => handleCampPress(item)}
-    >
-      {/* Camp Image */}
+    <Card style={styles.campCard} onPress={() => handleCampPress(item)}>
       {item.image ? (
         <Image
           source={{ uri: item.image }}
@@ -93,75 +64,79 @@ const CampsScreen: React.FC<Props> = ({ navigation }) => {
         </View>
       )}
 
-      {/* Camp Info */}
       <View style={styles.campInfo}>
-        {/* Badges */}
         <View style={styles.badgeRow}>
           {item.bestseller && (
             <Badge label="Best Seller" variant="bestseller" style={styles.badge} />
           )}
-          {item.almost_full && (
+          {(item.almost_full || item.isAlmostFull) && (
             <Badge label="Almost Full" variant="almostFull" style={styles.badge} />
+          )}
+          {item.isWaitlistOnly && (
+            <Badge label="Waitlist" variant="warning" style={styles.badge} />
           )}
         </View>
 
-        {/* Name */}
         <Text style={styles.campName} numberOfLines={2}>
           {item.name}
         </Text>
 
-        {/* Details */}
         <View style={styles.detailsRow}>
-          <Text style={styles.detailIcon}>?</Text>
+          <Text style={styles.detailIcon}>📅</Text>
           <Text style={styles.detailText}>{item.date}</Text>
         </View>
 
         {item.time && (
           <View style={styles.detailsRow}>
-            <Text style={styles.detailIcon}>?</Text>
+            <Text style={styles.detailIcon}>⏰</Text>
             <Text style={styles.detailText}>{item.time}</Text>
           </View>
         )}
 
         <View style={styles.detailsRow}>
-          <Text style={styles.detailIcon}>?</Text>
+          <Text style={styles.detailIcon}>📍</Text>
           <Text style={styles.detailText}>
             {item.location}
             {item.state ? `, ${item.state}` : ''}
           </Text>
         </View>
 
-        {/* Price */}
+        {typeof item.availableSeats === 'number' && (
+          <View style={styles.detailsRow}>
+            <Text style={styles.detailIcon}>🎟️</Text>
+            <Text style={styles.detailText}>
+              {item.isWaitlistOnly
+                ? 'Waitlist only'
+                : `${item.availableSeats} spots left`}
+            </Text>
+          </View>
+        )}
+
         <View style={styles.priceRow}>
           <Text style={styles.price}>{item.price}</Text>
-          <Text style={styles.viewDetails}>View Details ?</Text>
+          <Text style={styles.viewDetails}>View Details ›</Text>
         </View>
       </View>
     </Card>
   );
 
-  // Loading state
-  if (isLoading && !isRefreshing) {
+  if (isLoading && !isRefetching) {
     return <LoadingScreen message="Loading camps..." />;
   }
 
-  // Error state
-  if (error && camps.length === 0) {
-    return (
-      <ErrorState
-        message={error}
-        onRetry={() => fetchCamps()}
-      />
-    );
+  if (isError && camps.length === 0) {
+    if ((typedError as any)?.isSessionExpired?.()) {
+      logout();
+    }
+    return <ErrorState message={errorMessage} onRetry={() => refetch()} />;
   }
 
-  // Empty state
   if (!isLoading && camps.length === 0) {
     return (
       <EmptyState
         title="No Camps Available"
         message="Check back soon for upcoming camps and clinics!"
-        icon="?"
+        icon="⚽"
       />
     );
   }
@@ -176,7 +151,7 @@ const CampsScreen: React.FC<Props> = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={isRefreshing}
+            refreshing={isRefetching}
             onRefresh={handleRefresh}
             tintColor={colors.primary}
             colors={[colors.primary]}
@@ -199,8 +174,6 @@ const styles = StyleSheet.create({
   separator: {
     height: spacing.lg,
   },
-
-  // Camp Card
   campCard: {
     overflow: 'hidden',
     padding: 0,
@@ -223,8 +196,6 @@ const styles = StyleSheet.create({
   campInfo: {
     padding: spacing.lg,
   },
-
-  // Badges
   badgeRow: {
     flexDirection: 'row',
     marginBottom: spacing.sm,
@@ -232,8 +203,6 @@ const styles = StyleSheet.create({
   badge: {
     marginRight: spacing.sm,
   },
-
-  // Camp Name
   campName: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
@@ -241,8 +210,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     lineHeight: typography.sizes.lg * typography.lineHeights.tight,
   },
-
-  // Details
   detailsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -259,8 +226,6 @@ const styles = StyleSheet.create({
     color: colors.gray,
     flex: 1,
   },
-
-  // Price Row
   priceRow: {
     flexDirection: 'row',
     alignItems: 'center',

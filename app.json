@@ -3,7 +3,7 @@
     "name": "PTP Soccer",
     "slug": "ptp-soccer",
     "version": "1.0.0",
-    "sdkVersion": "54.0.0",
+    "sdkVersion": "52.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -38,15 +38,6 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/notification-icon.png",
-          "color": "#FCB900"
-        }
-      ]
-    ],
     "extra": {
       "eas": {
         "projectId": "your-project-id"

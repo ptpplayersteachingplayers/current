@@ -2,6 +2,8 @@
  * PTP Mobile App - Login Screen
  *
  * Features:
+ * - Hero background image with overlay
+ * - Real PTP logo
  * - Email/username and password inputs
  * - PTP branded styling
  * - Loading state during login
@@ -19,11 +21,17 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ImageBackground,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { PrimaryButton } from '../components';
 import { colors, spacing, typography, borderRadius, componentStyles } from '../theme';
+import { LOGO, SCREEN_IMAGES } from '../constants/images';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const LoginScreen: React.FC = () => {
   const { login, isLoading } = useAuth();
@@ -66,26 +74,41 @@ const LoginScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
+      {/* Hero Background Image */}
+      <ImageBackground
+        source={{ uri: SCREEN_IMAGES.loginBackground }}
+        style={styles.heroBackground}
+        resizeMode="cover"
+      >
+        <View style={styles.heroOverlay}>
+          <SafeAreaView style={styles.heroContent}>
+            {/* Logo */}
+            <Image
+              source={{ uri: LOGO.primary }}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+            <Text style={styles.heroTitle}>Players Teaching Players</Text>
+            <Text style={styles.heroSubtitle}>
+              Where NCAA & pro athletes coach the next generation
+            </Text>
+          </SafeAreaView>
+        </View>
+      </ImageBackground>
+
+      {/* Login Form Card */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
+        style={styles.formWrapper}
+        keyboardVerticalOffset={-100}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {/* Logo / Branding Area */}
-          <View style={styles.brandingContainer}>
-            <View style={styles.logoPlaceholder}>
-              <Text style={styles.logoText}>PTP</Text>
-            </View>
-            <Text style={styles.title}>Players Teaching Players</Text>
-            <Text style={styles.subtitle}>Soccer Camps</Text>
-          </View>
-
-          {/* Login Form */}
-          <View style={styles.formContainer}>
+          <View style={styles.formCard}>
             <Text style={styles.welcomeText}>Welcome Back</Text>
             <Text style={styles.instructionText}>
               Sign in to view your camps and training schedule
@@ -102,10 +125,7 @@ const LoginScreen: React.FC = () => {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Email or Username</Text>
               <TextInput
-                style={[
-                  styles.input,
-                  emailFocused && styles.inputFocused,
-                ]}
+                style={[styles.input, emailFocused && styles.inputFocused]}
                 value={email}
                 onChangeText={setEmail}
                 placeholder="Enter your email"
@@ -124,10 +144,7 @@ const LoginScreen: React.FC = () => {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Password</Text>
               <TextInput
-                style={[
-                  styles.input,
-                  passwordFocused && styles.inputFocused,
-                ]}
+                style={[styles.input, passwordFocused && styles.inputFocused]}
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Enter your password"
@@ -163,70 +180,82 @@ const LoginScreen: React.FC = () => {
             >
               <Text style={styles.forgotPasswordText}>Forgot your password?</Text>
             </TouchableOpacity>
-          </View>
 
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Don't have an account? Visit ptpsummercamps.com
-            </Text>
+            {/* Footer */}
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>
+                Don't have an account?{' '}
+                <Text style={styles.footerLink}>Visit ptpsummercamps.com</Text>
+              </Text>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.offWhite,
+    backgroundColor: colors.ink,
   },
-  keyboardView: {
+
+  // Hero Section
+  heroBackground: {
+    height: SCREEN_HEIGHT * 0.38,
+    width: '100%',
+  },
+  heroOverlay: {
     flex: 1,
+    backgroundColor: 'rgba(14, 15, 17, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroContent: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.xxl,
+  },
+  logo: {
+    width: 120,
+    height: 80,
+    marginBottom: spacing.md,
+  },
+  heroTitle: {
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
+    color: colors.white,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  heroSubtitle: {
+    fontSize: typography.sizes.sm,
+    color: colors.white,
+    opacity: 0.9,
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+
+  // Form Section
+  formWrapper: {
+    flex: 1,
+    marginTop: -spacing.xxl,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: spacing.xxl,
-    paddingVertical: spacing.xl,
   },
-
-  // Branding
-  brandingContainer: {
-    alignItems: 'center',
-    marginTop: spacing.xxxl,
-    marginBottom: spacing.xxxl,
-  },
-  logoPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: borderRadius.xl,
-    backgroundColor: colors.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.lg,
-  },
-  logoText: {
-    fontSize: 32,
-    fontWeight: typography.weights.bold,
-    color: colors.primary,
-  },
-  title: {
-    fontSize: typography.sizes.xl,
-    fontWeight: typography.weights.bold,
-    color: colors.ink,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: typography.sizes.md,
-    color: colors.gray,
-    marginTop: spacing.xs,
-  },
-
-  // Form
-  formContainer: {
+  formCard: {
     flex: 1,
+    backgroundColor: colors.white,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xxxl,
+    paddingBottom: spacing.xxl,
+    minHeight: SCREEN_HEIGHT * 0.65,
   },
+
+  // Form Content
   welcomeText: {
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
@@ -236,7 +265,7 @@ const styles = StyleSheet.create({
   instructionText: {
     fontSize: typography.sizes.md,
     color: colors.gray,
-    marginBottom: spacing.xxl,
+    marginBottom: spacing.xl,
     lineHeight: typography.sizes.md * typography.lineHeights.normal,
   },
 
@@ -272,7 +301,7 @@ const styles = StyleSheet.create({
 
   // Button
   loginButton: {
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
   },
 
   // Forgot Password
@@ -290,13 +319,17 @@ const styles = StyleSheet.create({
   // Footer
   footer: {
     marginTop: 'auto',
-    paddingTop: spacing.xxl,
+    paddingTop: spacing.xl,
     alignItems: 'center',
   },
   footerText: {
     fontSize: typography.sizes.sm,
     color: colors.gray,
     textAlign: 'center',
+  },
+  footerLink: {
+    color: colors.primary,
+    fontWeight: typography.weights.medium,
   },
 });
 

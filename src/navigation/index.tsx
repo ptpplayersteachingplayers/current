@@ -2,14 +2,14 @@
  * PTP Mobile App - Navigation Configuration
  *
  * Structure:
- * - RootNavigator: Auth vs Main (based on user state)
+ * - RootNavigator: Onboarding -> Auth vs Main (based on user state)
  * - AuthStack: Login screen
  * - MainTabs: Camps, Training, Schedule, Profile
  * - CampsStack: Camps list -> Camp detail
  * - TrainingStack: Trainers list -> Trainer detail
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -26,6 +26,7 @@ import TrainersScreen from '../screens/TrainersScreen';
 import TrainerDetailScreen from '../screens/TrainerDetailScreen';
 import ScheduleScreen from '../screens/ScheduleScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import OnboardingScreen, { checkOnboardingComplete } from '../screens/OnboardingScreen';
 
 // Types
 import {
@@ -60,15 +61,15 @@ const TabIcon: React.FC<TabIconProps> = ({ label, focused }) => {
   const getIcon = (): string => {
     switch (label) {
       case 'Camps':
-        return '?';
+        return '⚽';
       case 'Training':
-        return '?';
+        return '🏃';
       case 'Schedule':
-        return '?';
+        return '📅';
       case 'Profile':
-        return '?';
+        return '👤';
       default:
-        return '?';
+        return '●';
     }
   };
 
@@ -265,10 +266,25 @@ const MainTabs: React.FC = () => {
 
 const RootNavigator: React.FC = () => {
   const { user, isInitialized } = useAuth();
+  const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
 
-  // Show loading screen while checking auth state
-  if (!isInitialized) {
+  // Check if onboarding has been completed
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      const isComplete = await checkOnboardingComplete();
+      setShowOnboarding(!isComplete);
+    };
+    checkOnboarding();
+  }, []);
+
+  // Show loading screen while checking auth and onboarding state
+  if (!isInitialized || showOnboarding === null) {
     return <LoadingScreen message="Loading..." />;
+  }
+
+  // Show onboarding if not completed
+  if (showOnboarding) {
+    return <OnboardingScreen onComplete={() => setShowOnboarding(false)} />;
   }
 
   return (

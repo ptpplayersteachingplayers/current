@@ -52,69 +52,111 @@ const CampsScreen: React.FC<Props> = ({ navigation }) => {
 
   const renderCampCard = ({ item }: { item: Camp }) => (
     <Card style={styles.campCard} onPress={() => handleCampPress(item)}>
-      {item.image ? (
-        <Image
-          source={{ uri: item.image }}
-          style={styles.campImage}
-          resizeMode="cover"
-        />
-      ) : (
-        <View style={[styles.campImage, styles.campImagePlaceholder]}>
-          <Text style={styles.campImagePlaceholderText}>PTP</Text>
+      {/* Image Section */}
+      <View style={styles.imageContainer}>
+        {item.image ? (
+          <Image
+            source={{ uri: item.image }}
+            style={styles.campImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.campImage, styles.campImagePlaceholder]}>
+            <Text style={styles.campImagePlaceholderText}>⚽</Text>
+            <Text style={styles.campImagePlaceholderLabel}>PTP Soccer</Text>
+          </View>
+        )}
+        {/* Price Badge Overlay */}
+        <View style={styles.priceOverlay}>
+          <Text style={styles.priceOverlayText}>{item.price}</Text>
         </View>
-      )}
+        {/* Category Badge */}
+        {item.category && (
+          <View style={styles.categoryBadge}>
+            <Text style={styles.categoryBadgeText}>
+              {item.category === 'winter-clinics' ? 'Winter Clinic' : 'Summer Camp'}
+            </Text>
+          </View>
+        )}
+      </View>
 
       <View style={styles.campInfo}>
-        <View style={styles.badgeRow}>
-          {item.bestseller && (
-            <Badge label="Best Seller" variant="bestseller" style={styles.badge} />
-          )}
-          {(item.almost_full || item.isAlmostFull) && (
-            <Badge label="Almost Full" variant="almostFull" style={styles.badge} />
-          )}
-          {item.isWaitlistOnly && (
-            <Badge label="Waitlist" variant="warning" style={styles.badge} />
-          )}
-        </View>
+        {/* Status Badges */}
+        {(item.bestseller || item.almost_full || item.isAlmostFull || item.isWaitlistOnly) && (
+          <View style={styles.badgeRow}>
+            {item.bestseller && (
+              <Badge label="Best Seller" variant="bestseller" style={styles.badge} />
+            )}
+            {(item.almost_full || item.isAlmostFull) && (
+              <Badge label="Almost Full" variant="almostFull" style={styles.badge} />
+            )}
+            {item.isWaitlistOnly && (
+              <Badge label="Waitlist" variant="warning" style={styles.badge} />
+            )}
+          </View>
+        )}
 
+        {/* Camp Name */}
         <Text style={styles.campName} numberOfLines={2}>
           {item.name}
         </Text>
 
-        <View style={styles.detailsRow}>
-          <Text style={styles.detailIcon}>📅</Text>
-          <Text style={styles.detailText}>{item.date}</Text>
-        </View>
-
-        {item.time && (
-          <View style={styles.detailsRow}>
-            <Text style={styles.detailIcon}>⏰</Text>
-            <Text style={styles.detailText}>{item.time}</Text>
-          </View>
+        {/* Description Preview */}
+        {item.description && (
+          <Text style={styles.campDescription} numberOfLines={2}>
+            {item.description.replace(/<[^>]*>/g, '')}
+          </Text>
         )}
 
-        <View style={styles.detailsRow}>
-          <Text style={styles.detailIcon}>📍</Text>
-          <Text style={styles.detailText}>
-            {item.location}
-            {item.state ? `, ${item.state}` : ''}
-          </Text>
-        </View>
-
-        {typeof item.availableSeats === 'number' && (
+        {/* Details Grid */}
+        <View style={styles.detailsContainer}>
           <View style={styles.detailsRow}>
-            <Text style={styles.detailIcon}>🎟️</Text>
+            <Text style={styles.detailIcon}>📅</Text>
+            <Text style={styles.detailText}>{item.date || 'Date TBD'}</Text>
+          </View>
+
+          {item.time && (
+            <View style={styles.detailsRow}>
+              <Text style={styles.detailIcon}>⏰</Text>
+              <Text style={styles.detailText}>{item.time}</Text>
+            </View>
+          )}
+
+          <View style={styles.detailsRow}>
+            <Text style={styles.detailIcon}>📍</Text>
             <Text style={styles.detailText}>
-              {item.isWaitlistOnly
-                ? 'Waitlist only'
-                : `${item.availableSeats} spots left`}
+              {item.location}
+              {item.state ? `, ${item.state}` : ''}
             </Text>
           </View>
-        )}
 
-        <View style={styles.priceRow}>
-          <Text style={styles.price}>{item.price}</Text>
-          <Text style={styles.viewDetails}>View Details ›</Text>
+          {typeof item.availableSeats === 'number' && (
+            <View style={styles.detailsRow}>
+              <Text style={styles.detailIcon}>🎟️</Text>
+              <Text style={[
+                styles.detailText,
+                item.isWaitlistOnly && styles.detailTextWarning,
+                item.availableSeats <= 5 && !item.isWaitlistOnly && styles.detailTextUrgent
+              ]}>
+                {item.isWaitlistOnly
+                  ? 'Waitlist only'
+                  : item.availableSeats <= 5
+                    ? `Only ${item.availableSeats} spots left!`
+                    : `${item.availableSeats} spots available`}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* CTA Row */}
+        <View style={styles.ctaRow}>
+          <View style={styles.priceContainer}>
+            <Text style={styles.priceLabel}>Starting at</Text>
+            <Text style={styles.price}>{item.price}</Text>
+          </View>
+          <View style={styles.viewDetailsButton}>
+            <Text style={styles.viewDetailsText}>View Details</Text>
+          </View>
         </View>
       </View>
     </Card>
@@ -174,13 +216,26 @@ const styles = StyleSheet.create({
   separator: {
     height: spacing.lg,
   },
+
+  // Card Container
   campCard: {
     overflow: 'hidden',
     padding: 0,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+
+  // Image Section
+  imageContainer: {
+    position: 'relative',
   },
   campImage: {
     width: '100%',
-    height: 160,
+    height: 180,
     backgroundColor: colors.border,
   },
   campImagePlaceholder: {
@@ -189,26 +244,78 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink,
   },
   campImagePlaceholderText: {
-    fontSize: 32,
-    fontWeight: typography.weights.bold,
+    fontSize: 48,
+    marginBottom: spacing.xs,
+  },
+  campImagePlaceholderLabel: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
     color: colors.primary,
   },
+  priceOverlay: {
+    position: 'absolute',
+    bottom: spacing.md,
+    right: spacing.md,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+  },
+  priceOverlayText: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
+    color: colors.white,
+  },
+  categoryBadge: {
+    position: 'absolute',
+    top: spacing.md,
+    left: spacing.md,
+    backgroundColor: 'rgba(14, 15, 17, 0.8)',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: 6,
+  },
+  categoryBadgeText: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+    color: colors.white,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  // Camp Info Section
   campInfo: {
     padding: spacing.lg,
   },
   badgeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     marginBottom: spacing.sm,
   },
   badge: {
     marginRight: spacing.sm,
+    marginBottom: spacing.xs,
   },
   campName: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
     color: colors.ink,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
     lineHeight: typography.sizes.lg * typography.lineHeights.tight,
+  },
+  campDescription: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray,
+    lineHeight: typography.sizes.sm * typography.lineHeights.relaxed,
+    marginBottom: spacing.md,
+  },
+
+  // Details Section
+  detailsContainer: {
+    backgroundColor: colors.offWhite,
+    borderRadius: 10,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
   detailsRow: {
     flexDirection: 'row',
@@ -218,32 +325,55 @@ const styles = StyleSheet.create({
   detailIcon: {
     fontSize: 14,
     marginRight: spacing.sm,
-    width: 20,
+    width: 22,
     textAlign: 'center',
   },
   detailText: {
     fontSize: typography.sizes.sm,
-    color: colors.gray,
+    color: colors.ink,
     flex: 1,
   },
-  priceRow: {
+  detailTextWarning: {
+    color: '#F59E0B',
+    fontWeight: typography.weights.medium,
+  },
+  detailTextUrgent: {
+    color: colors.error,
+    fontWeight: typography.weights.semibold,
+  },
+
+  // CTA Row
+  ctaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: spacing.md,
     paddingTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+  priceContainer: {
+    flex: 1,
+  },
+  priceLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.gray,
+    marginBottom: 2,
   },
   price: {
     fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
     color: colors.ink,
   },
-  viewDetails: {
+  viewDetailsButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: 8,
+  },
+  viewDetailsText: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.semibold,
-    color: colors.primary,
+    color: colors.white,
   },
 });
 

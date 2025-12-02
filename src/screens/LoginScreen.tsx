@@ -112,10 +112,22 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.formCard}>
-            <Text style={styles.welcomeText}>Welcome Back</Text>
-            <Text style={styles.instructionText}>
-              Sign in to view your camps and training schedule
-            </Text>
+            {/* Create Account CTA - Prominent at top */}
+            <View style={styles.createAccountBanner}>
+              <Text style={styles.bannerText}>New to PTP Soccer?</Text>
+              <TouchableOpacity
+                style={styles.createAccountButton}
+                onPress={() => navigation.navigate('Register')}
+              >
+                <Text style={styles.createAccountButtonText}>Create Free Account</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or sign in</Text>
+              <View style={styles.dividerLine} />
+            </View>
 
             {/* Error Message */}
             {error && (
@@ -354,6 +366,49 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.primary,
     fontWeight: typography.weights.medium,
+  },
+
+  // Create Account Banner
+  createAccountBanner: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.xl,
+    alignItems: 'center',
+  },
+  bannerText: {
+    fontSize: typography.sizes.md,
+    color: colors.white,
+    marginBottom: spacing.md,
+    fontWeight: typography.weights.medium,
+  },
+  createAccountButton: {
+    backgroundColor: colors.white,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xxl,
+    borderRadius: borderRadius.md,
+  },
+  createAccountButtonText: {
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
+    color: colors.primary,
+  },
+
+  // Divider
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    fontSize: typography.sizes.sm,
+    color: colors.gray,
+    marginHorizontal: spacing.md,
   },
 });
 

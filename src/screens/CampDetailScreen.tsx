@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { PrimaryButton, Badge } from '../components';
 import { colors, spacing, typography, borderRadius } from '../theme';
 import { CampsStackParamList } from '../types';
@@ -138,23 +139,23 @@ const CampDetailScreen: React.FC<Props> = ({ route }) => {
             </View>
           )}
 
-          {/* What's Included (placeholder content) */}
+          {/* What's Included */}
           <View style={styles.includesSection}>
             <Text style={styles.sectionTitle}>What's Included</Text>
             <View style={styles.includeItem}>
-              <Text style={styles.includeIcon}>?</Text>
+              <Ionicons name="trophy-outline" size={18} color={colors.primary} style={styles.includeIcon} />
               <Text style={styles.includeText}>Professional coaching from NCAA & pro players</Text>
             </View>
             <View style={styles.includeItem}>
-              <Text style={styles.includeIcon}>?</Text>
+              <Ionicons name="shirt-outline" size={18} color={colors.primary} style={styles.includeIcon} />
               <Text style={styles.includeText}>PTP camp t-shirt</Text>
             </View>
             <View style={styles.includeItem}>
-              <Text style={styles.includeIcon}>?</Text>
+              <Ionicons name="clipboard-outline" size={18} color={colors.primary} style={styles.includeIcon} />
               <Text style={styles.includeText}>Skills assessment and feedback</Text>
             </View>
             <View style={styles.includeItem}>
-              <Text style={styles.includeIcon}>?</Text>
+              <Ionicons name="football-outline" size={18} color={colors.primary} style={styles.includeIcon} />
               <Text style={styles.includeText}>Fun, competitive environment</Text>
             </View>
           </View>
@@ -298,9 +299,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   includeIcon: {
-    fontSize: 16,
     marginRight: spacing.sm,
     marginTop: 2,
+    width: 20,
   },
   includeText: {
     fontSize: typography.sizes.md,

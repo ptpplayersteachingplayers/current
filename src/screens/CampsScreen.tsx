@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useCampsQuery } from '../api/queries';
 import { useAuth } from '../context/AuthContext';
 import { Card, Badge, LoadingScreen, ErrorState, EmptyState } from '../components';
@@ -82,19 +83,19 @@ const CampsScreen: React.FC<Props> = ({ navigation }) => {
         </Text>
 
         <View style={styles.detailsRow}>
-          <Text style={styles.detailIcon}>📅</Text>
+          <Ionicons name="calendar-outline" size={14} color={colors.gray} style={styles.detailIcon} />
           <Text style={styles.detailText}>{item.date}</Text>
         </View>
 
         {item.time && (
           <View style={styles.detailsRow}>
-            <Text style={styles.detailIcon}>⏰</Text>
+            <Ionicons name="time-outline" size={14} color={colors.gray} style={styles.detailIcon} />
             <Text style={styles.detailText}>{item.time}</Text>
           </View>
         )}
 
         <View style={styles.detailsRow}>
-          <Text style={styles.detailIcon}>📍</Text>
+          <Ionicons name="location-outline" size={14} color={colors.gray} style={styles.detailIcon} />
           <Text style={styles.detailText}>
             {item.location}
             {item.state ? `, ${item.state}` : ''}
@@ -103,7 +104,7 @@ const CampsScreen: React.FC<Props> = ({ navigation }) => {
 
         {typeof item.availableSeats === 'number' && (
           <View style={styles.detailsRow}>
-            <Text style={styles.detailIcon}>🎟️</Text>
+            <Ionicons name="ticket-outline" size={14} color={colors.gray} style={styles.detailIcon} />
             <Text style={styles.detailText}>
               {item.isWaitlistOnly
                 ? 'Waitlist only'
@@ -136,7 +137,7 @@ const CampsScreen: React.FC<Props> = ({ navigation }) => {
       <EmptyState
         title="No Camps Available"
         message="Check back soon for upcoming camps and clinics!"
-        icon="⚽"
+        iconName="football-outline"
       />
     );
   }
@@ -216,10 +217,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   detailIcon: {
-    fontSize: 14,
     marginRight: spacing.sm,
     width: 20,
-    textAlign: 'center',
   },
   detailText: {
     fontSize: typography.sizes.sm,

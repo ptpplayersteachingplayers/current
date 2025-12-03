@@ -30,6 +30,19 @@ export interface LoginResponse {
   user_display_name: string;
 }
 
+export interface RegisterCredentials {
+  email: string;
+  password: string;
+  first_name: string;
+  last_name: string;
+}
+
+export interface RegisterResponse {
+  id: number;
+  email: string;
+  name: string;
+}
+
 // =============================================================================
 // Camp / Clinic Types
 // =============================================================================

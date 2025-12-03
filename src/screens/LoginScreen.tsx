@@ -5,8 +5,9 @@
  * - Hero background image with overlay
  * - Real PTP logo
  * - Email/username and password inputs
+ * - Account creation (sign up) mode
  * - PTP branded styling
- * - Loading state during login
+ * - Loading state during login/register
  * - Error handling with clear messages
  */
 
@@ -33,20 +34,29 @@ import { LOGO, SCREEN_IMAGES } from '../constants/images';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const LoginScreen: React.FC = () => {
-  const { login, isLoading, continueAsGuest } = useAuth();
+type AuthMode = 'login' | 'register';
 
+const LoginScreen: React.FC = () => {
+  const { login, register, isLoading, continueAsGuest } = useAuth();
+
+  const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
+  const [confirmPasswordFocused, setConfirmPasswordFocused] = useState(false);
+  const [firstNameFocused, setFirstNameFocused] = useState(false);
+  const [lastNameFocused, setLastNameFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isRegisterMode = mode === 'register';
+
   const handleLogin = async () => {
-    // Clear previous errors
     setError(null);
 
-    // Validate inputs
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
 
@@ -65,12 +75,93 @@ const LoginScreen: React.FC = () => {
         username: trimmedEmail,
         password: trimmedPassword,
       });
-      // Success - navigation will happen automatically via AuthContext
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'An unexpected error occurred.';
       setError(errorMessage);
     }
+  };
+
+  const handleRegister = async () => {
+    setError(null);
+
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+    const trimmedConfirmPassword = confirmPassword.trim();
+    const trimmedFirstName = firstName.trim();
+    const trimmedLastName = lastName.trim();
+
+    if (!trimmedFirstName) {
+      setError('Please enter your first name.');
+      return;
+    }
+
+    if (!trimmedLastName) {
+      setError('Please enter your last name.');
+      return;
+    }
+
+    if (!trimmedEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    if (!trimmedPassword) {
+      setError('Please enter a password.');
+      return;
+    }
+
+    if (trimmedPassword.length < 8) {
+      setError('Password must be at least 8 characters long.');
+      return;
+    }
+
+    if (trimmedPassword !== trimmedConfirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    try {
+      await register({
+        email: trimmedEmail,
+        password: trimmedPassword,
+        first_name: trimmedFirstName,
+        last_name: trimmedLastName,
+      });
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : 'An unexpected error occurred.';
+      setError(errorMessage);
+    }
+  };
+
+  const handleSubmit = () => {
+    if (isRegisterMode) {
+      handleRegister();
+    } else {
+      handleLogin();
+    }
+  };
+
+  const toggleMode = () => {
+    setError(null);
+    setMode(isRegisterMode ? 'login' : 'register');
+  };
+
+  const clearForm = () => {
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setFirstName('');
+    setLastName('');
+    setError(null);
   };
 
   return (
@@ -97,7 +188,7 @@ const LoginScreen: React.FC = () => {
         </View>
       </ImageBackground>
 
-      {/* Login Form Card */}
+      {/* Login/Register Form Card */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.formWrapper}
@@ -109,9 +200,13 @@ const LoginScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.formCard}>
-            <Text style={styles.welcomeText}>Welcome Back</Text>
+            <Text style={styles.welcomeText}>
+              {isRegisterMode ? 'Create Account' : 'Welcome Back'}
+            </Text>
             <Text style={styles.instructionText}>
-              Sign in to view your camps and training schedule
+              {isRegisterMode
+                ? 'Sign up to register for camps and book private training'
+                : 'Sign in to view your camps and training schedule'}
             </Text>
 
             {/* Error Message */}
@@ -121,14 +216,54 @@ const LoginScreen: React.FC = () => {
               </View>
             )}
 
+            {/* Name Fields (Register Mode Only) */}
+            {isRegisterMode && (
+              <View style={styles.nameRow}>
+                <View style={[styles.inputGroup, styles.nameInput]}>
+                  <Text style={styles.label}>First Name</Text>
+                  <TextInput
+                    style={[styles.input, firstNameFocused && styles.inputFocused]}
+                    value={firstName}
+                    onChangeText={setFirstName}
+                    placeholder="First name"
+                    placeholderTextColor={colors.grayLight}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                    textContentType="givenName"
+                    onFocus={() => setFirstNameFocused(true)}
+                    onBlur={() => setFirstNameFocused(false)}
+                    editable={!isLoading}
+                  />
+                </View>
+                <View style={[styles.inputGroup, styles.nameInput]}>
+                  <Text style={styles.label}>Last Name</Text>
+                  <TextInput
+                    style={[styles.input, lastNameFocused && styles.inputFocused]}
+                    value={lastName}
+                    onChangeText={setLastName}
+                    placeholder="Last name"
+                    placeholderTextColor={colors.grayLight}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                    textContentType="familyName"
+                    onFocus={() => setLastNameFocused(true)}
+                    onBlur={() => setLastNameFocused(false)}
+                    editable={!isLoading}
+                  />
+                </View>
+              </View>
+            )}
+
             {/* Email Input */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email or Username</Text>
+              <Text style={styles.label}>
+                {isRegisterMode ? 'Email Address' : 'Email or Username'}
+              </Text>
               <TextInput
                 style={[styles.input, emailFocused && styles.inputFocused]}
                 value={email}
                 onChangeText={setEmail}
-                placeholder="Enter your email"
+                placeholder={isRegisterMode ? 'Enter your email' : 'Enter your email or username'}
                 placeholderTextColor={colors.grayLight}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -147,21 +282,41 @@ const LoginScreen: React.FC = () => {
                 style={[styles.input, passwordFocused && styles.inputFocused]}
                 value={password}
                 onChangeText={setPassword}
-                placeholder="Enter your password"
+                placeholder={isRegisterMode ? 'Create a password (min 8 characters)' : 'Enter your password'}
                 placeholderTextColor={colors.grayLight}
                 secureTextEntry
-                textContentType="password"
+                textContentType={isRegisterMode ? 'newPassword' : 'password'}
                 onFocus={() => setPasswordFocused(true)}
                 onBlur={() => setPasswordFocused(false)}
                 editable={!isLoading}
-                onSubmitEditing={handleLogin}
+                onSubmitEditing={isRegisterMode ? undefined : handleSubmit}
               />
             </View>
 
-            {/* Login Button */}
+            {/* Confirm Password (Register Mode Only) */}
+            {isRegisterMode && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Confirm Password</Text>
+                <TextInput
+                  style={[styles.input, confirmPasswordFocused && styles.inputFocused]}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Confirm your password"
+                  placeholderTextColor={colors.grayLight}
+                  secureTextEntry
+                  textContentType="newPassword"
+                  onFocus={() => setConfirmPasswordFocused(true)}
+                  onBlur={() => setConfirmPasswordFocused(false)}
+                  editable={!isLoading}
+                  onSubmitEditing={handleSubmit}
+                />
+              </View>
+            )}
+
+            {/* Submit Button */}
             <PrimaryButton
-              title="Log In"
-              onPress={handleLogin}
+              title={isRegisterMode ? 'Create Account' : 'Log In'}
+              onPress={handleSubmit}
               loading={isLoading}
               disabled={isLoading}
               style={styles.loginButton}
@@ -176,25 +331,29 @@ const LoginScreen: React.FC = () => {
               <Text style={styles.guestButtonText}>Continue as Guest</Text>
             </TouchableOpacity>
 
-            {/* Forgot Password Link */}
-            <TouchableOpacity
-              style={styles.forgotPasswordButton}
-              onPress={() => {
-                Alert.alert(
-                  'Reset Password',
-                  'Please visit ptpsummercamps.com to reset your password.',
-                  [{ text: 'OK' }]
-                );
-              }}
-            >
-              <Text style={styles.forgotPasswordText}>Forgot your password?</Text>
-            </TouchableOpacity>
+            {/* Forgot Password Link (Login Mode Only) */}
+            {!isRegisterMode && (
+              <TouchableOpacity
+                style={styles.forgotPasswordButton}
+                onPress={() => {
+                  Alert.alert(
+                    'Reset Password',
+                    'Please visit ptpsummercamps.com to reset your password.',
+                    [{ text: 'OK' }]
+                  );
+                }}
+              >
+                <Text style={styles.forgotPasswordText}>Forgot your password?</Text>
+              </TouchableOpacity>
+            )}
 
-            {/* Footer */}
+            {/* Footer - Toggle Mode */}
             <View style={styles.footer}>
               <Text style={styles.footerText}>
-                Don't have an account?{' '}
-                <Text style={styles.footerLink}>Visit ptpsummercamps.com</Text>
+                {isRegisterMode ? 'Already have an account? ' : "Don't have an account? "}
+                <Text style={styles.footerLink} onPress={toggleMode}>
+                  {isRegisterMode ? 'Log In' : 'Sign Up'}
+                </Text>
               </Text>
             </View>
           </View>
@@ -212,7 +371,7 @@ const styles = StyleSheet.create({
 
   // Hero Section
   heroBackground: {
-    height: SCREEN_HEIGHT * 0.38,
+    height: SCREEN_HEIGHT * 0.32,
     width: '100%',
   },
   heroOverlay: {
@@ -226,12 +385,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
   },
   logo: {
-    width: 120,
-    height: 80,
-    marginBottom: spacing.md,
+    width: 100,
+    height: 66,
+    marginBottom: spacing.sm,
   },
   heroTitle: {
-    fontSize: typography.sizes.xl,
+    fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
     color: colors.white,
     textAlign: 'center',
@@ -248,7 +407,7 @@ const styles = StyleSheet.create({
   // Form Section
   formWrapper: {
     flex: 1,
-    marginTop: -spacing.xxl,
+    marginTop: -spacing.xl,
   },
   scrollContent: {
     flexGrow: 1,
@@ -258,24 +417,24 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderTopLeftRadius: borderRadius.xl,
     borderTopRightRadius: borderRadius.xl,
-    paddingHorizontal: spacing.xxl,
-    paddingTop: spacing.xxxl,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xxl,
     paddingBottom: spacing.xxl,
-    minHeight: SCREEN_HEIGHT * 0.65,
+    minHeight: SCREEN_HEIGHT * 0.7,
   },
 
   // Form Content
   welcomeText: {
-    fontSize: typography.sizes.xxl,
+    fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
     color: colors.ink,
     marginBottom: spacing.sm,
   },
   instructionText: {
-    fontSize: typography.sizes.md,
+    fontSize: typography.sizes.sm,
     color: colors.gray,
-    marginBottom: spacing.xl,
-    lineHeight: typography.sizes.md * typography.lineHeights.normal,
+    marginBottom: spacing.lg,
+    lineHeight: typography.sizes.sm * typography.lineHeights.normal,
   },
 
   // Error
@@ -291,15 +450,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
+  // Name Row
+  nameRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  nameInput: {
+    flex: 1,
+  },
+
   // Input
   inputGroup: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   label: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.medium,
     color: colors.ink,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   input: {
     ...componentStyles.input,
@@ -316,7 +484,7 @@ const styles = StyleSheet.create({
   // Guest Button
   guestButton: {
     alignItems: 'center',
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
@@ -332,7 +500,7 @@ const styles = StyleSheet.create({
   // Forgot Password
   forgotPasswordButton: {
     alignItems: 'center',
-    marginTop: spacing.xl,
+    marginTop: spacing.lg,
     padding: spacing.sm,
   },
   forgotPasswordText: {
@@ -344,7 +512,7 @@ const styles = StyleSheet.create({
   // Footer
   footer: {
     marginTop: 'auto',
-    paddingTop: spacing.xl,
+    paddingTop: spacing.lg,
     alignItems: 'center',
   },
   footerText: {
@@ -354,7 +522,7 @@ const styles = StyleSheet.create({
   },
   footerLink: {
     color: colors.primary,
-    fontWeight: typography.weights.medium,
+    fontWeight: typography.weights.semibold,
   },
 });
 

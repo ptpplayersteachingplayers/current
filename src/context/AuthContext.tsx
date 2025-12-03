@@ -18,13 +18,14 @@ import React, {
 } from 'react';
 import {
   login as apiLogin,
+  register as apiRegister,
   getMe,
   setAuthToken,
   clearAuthToken,
   loadStoredToken,
   ApiClientError,
 } from '../api/client';
-import { User, LoginCredentials } from '../types';
+import { User, LoginCredentials, RegisterCredentials } from '../types';
 import queryClient from '../api/queryClient';
 
 // =============================================================================
@@ -40,6 +41,7 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
+  register: (credentials: RegisterCredentials) => Promise<void>;
   logout: () => Promise<void>;
   continueAsGuest: () => void;
 }
@@ -165,6 +167,53 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   /**
+   * Register a new account and automatically log in
+   */
+  const register = useCallback(async (credentials: RegisterCredentials): Promise<void> => {
+    setState((prev) => ({ ...prev, isLoading: true }));
+
+    try {
+      // Call register API
+      await apiRegister(credentials);
+
+      // Automatically log in after successful registration
+      const loginResponse = await apiLogin({
+        username: credentials.email,
+        password: credentials.password,
+      });
+
+      // Store the token
+      await setAuthToken(loginResponse.token);
+
+      // Fetch full user info
+      const user = await getMe();
+
+      setState({
+        user,
+        isLoading: false,
+        isInitialized: true,
+        isGuest: false,
+      });
+
+    } catch (error) {
+      setState((prev) => ({ ...prev, isLoading: false }));
+
+      // Re-throw with user-friendly message
+      if (error instanceof ApiClientError) {
+        if (error.code === 'existing_user_email' || error.message.includes('already registered')) {
+          throw new Error('An account with this email already exists. Please log in instead.');
+        }
+        if (error.code === 'invalid_email') {
+          throw new Error('Please enter a valid email address.');
+        }
+        throw new Error(error.message);
+      }
+
+      throw new Error('Unable to create account. Please check your connection and try again.');
+    }
+  }, []);
+
+  /**
    * Logout - clear token and user
    */
   const logout = useCallback(async (): Promise<void> => {
@@ -198,6 +247,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const value: AuthContextValue = {
     ...state,
     login,
+    register,
     logout,
     continueAsGuest,
   };

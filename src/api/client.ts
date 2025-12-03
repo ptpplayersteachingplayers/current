@@ -21,6 +21,8 @@ import {
   Session,
   LoginCredentials,
   LoginResponse,
+  RegisterCredentials,
+  RegisterResponse,
   DeviceRegistration,
   DeviceRegistrationResponse,
   ApiError,
@@ -205,6 +207,18 @@ export class ApiClientError extends Error {
 export const login = async (credentials: LoginCredentials): Promise<LoginResponse> => {
   const response = await apiClient.post<LoginResponse>(
     '/jwt-auth/v1/token',
+    credentials
+  );
+  return response.data;
+};
+
+/**
+ * Register a new user account
+ * Returns user info on success
+ */
+export const register = async (credentials: RegisterCredentials): Promise<RegisterResponse> => {
+  const response = await apiClient.post<RegisterResponse>(
+    '/ptp/v1/register',
     credentials
   );
   return response.data;

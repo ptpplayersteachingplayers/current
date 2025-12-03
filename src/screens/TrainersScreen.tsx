@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useTrainersQuery } from '../api/queries';
 import { useAuth } from '../context/AuthContext';
 import { Card, LoadingScreen, ErrorState, EmptyState } from '../components';
@@ -95,7 +96,7 @@ const TrainersScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.detailsRow}>
             {item.city && (
               <View style={styles.detailItem}>
-                <Text style={styles.detailIcon}>📍</Text>
+                <Ionicons name="location-outline" size={12} color={colors.gray} style={styles.detailIcon} />
                 <Text style={styles.detailText} numberOfLines={1}>
                   {item.city}
                 </Text>
@@ -141,7 +142,7 @@ const TrainersScreen: React.FC<Props> = ({ navigation }) => {
       <EmptyState
         title="No Trainers Available"
         message="Private training is coming soon! Check back later for our roster of NCAA and pro trainers."
-        icon="🏃"
+        iconName="fitness-outline"
       />
     );
   }
@@ -250,7 +251,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   detailIcon: {
-    fontSize: 12,
     marginRight: 4,
   },
   detailText: {

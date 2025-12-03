@@ -1,14 +1,17 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, borderRadius } from '../theme';
 import { PrimaryButton } from './PrimaryButton';
+
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
 interface EmptyStateProps {
   title?: string;
   message: string;
   actionLabel?: string;
   onAction?: () => void;
-  icon?: string;
+  iconName?: IoniconsName;
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({
@@ -16,12 +19,12 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   message,
   actionLabel,
   onAction,
-  icon = '?',
+  iconName = 'help-circle-outline',
 }) => {
   return (
     <View style={styles.container}>
       <View style={styles.iconContainer}>
-        <Text style={styles.icon}>{icon}</Text>
+        <Ionicons name={iconName} size={36} color={colors.gray} />
       </View>
       {title && <Text style={styles.title}>{title}</Text>}
       <Text style={styles.message}>{message}</Text>
@@ -55,10 +58,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.lg,
-  },
-  icon: {
-    fontSize: 36,
-    color: colors.gray,
   },
   title: {
     fontSize: typography.sizes.xl,

@@ -20,9 +20,12 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { Card, PrimaryButton } from '../components';
 import { colors, spacing, typography, borderRadius } from '../theme';
+
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
 const ProfileScreen: React.FC = () => {
   const { user, logout, isLoading, isGuest } = useAuth();
@@ -88,7 +91,7 @@ const ProfileScreen: React.FC = () => {
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <View style={styles.guestContainer}>
           <View style={styles.guestIconContainer}>
-            <Text style={styles.guestIcon}>👤</Text>
+            <Ionicons name="person-outline" size={48} color={colors.gray} />
           </View>
           <Text style={styles.guestTitle}>Sign In to View Profile</Text>
           <Text style={styles.guestSubtitle}>
@@ -99,9 +102,6 @@ const ProfileScreen: React.FC = () => {
             onPress={logout}
             style={styles.guestButton}
           />
-          <TouchableOpacity onPress={handleVisitWebsite} style={styles.guestLink}>
-            <Text style={styles.guestLinkText}>Create an account at ptpsummercamps.com</Text>
-          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -132,19 +132,19 @@ const ProfileScreen: React.FC = () => {
 
           <Card style={styles.menuCard} noPadding>
             <MenuItem
-              icon="?"
+              iconName="notifications-outline"
               label="Manage Notifications"
               onPress={handleOpenNotificationSettings}
             />
             <View style={styles.menuDivider} />
             <MenuItem
-              icon="?"
+              iconName="mail-outline"
               label="Contact Support"
               onPress={handleContactSupport}
             />
             <View style={styles.menuDivider} />
             <MenuItem
-              icon="?"
+              iconName="globe-outline"
               label="Visit Website"
               onPress={handleVisitWebsite}
               external
@@ -158,14 +158,14 @@ const ProfileScreen: React.FC = () => {
 
           <Card style={styles.menuCard} noPadding>
             <MenuItem
-              icon="?"
+              iconName="shield-checkmark-outline"
               label="Privacy Policy"
               onPress={handlePrivacyPolicy}
               external
             />
             <View style={styles.menuDivider} />
             <MenuItem
-              icon="?"
+              iconName="document-text-outline"
               label="Terms of Service"
               onPress={handleTermsOfService}
               external
@@ -199,21 +199,27 @@ const ProfileScreen: React.FC = () => {
 
 // Menu Item Component
 interface MenuItemProps {
-  icon: string;
+  iconName: IoniconsName;
   label: string;
   onPress: () => void;
   external?: boolean;
 }
 
-const MenuItem: React.FC<MenuItemProps> = ({ icon, label, onPress, external }) => (
+const MenuItem: React.FC<MenuItemProps> = ({ iconName, label, onPress, external }) => (
   <TouchableOpacity
     style={styles.menuItem}
     onPress={onPress}
     activeOpacity={0.7}
   >
-    <Text style={styles.menuIcon}>{icon}</Text>
+    <View style={styles.menuIconContainer}>
+      <Ionicons name={iconName} size={20} color={colors.ink} />
+    </View>
     <Text style={styles.menuLabel}>{label}</Text>
-    <Text style={styles.menuArrow}>{external ? '?' : '?'}</Text>
+    <Ionicons
+      name={external ? 'open-outline' : 'chevron-forward'}
+      size={16}
+      color={colors.gray}
+    />
   </TouchableOpacity>
 );
 
@@ -288,20 +294,15 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.lg,
   },
-  menuIcon: {
-    fontSize: 20,
+  menuIconContainer: {
     marginRight: spacing.md,
     width: 28,
-    textAlign: 'center',
+    alignItems: 'center',
   },
   menuLabel: {
     flex: 1,
     fontSize: typography.sizes.md,
     color: colors.ink,
-  },
-  menuArrow: {
-    fontSize: 16,
-    color: colors.gray,
   },
   menuDivider: {
     height: 1,
@@ -362,9 +363,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.xl,
   },
-  guestIcon: {
-    fontSize: 48,
-  },
   guestTitle: {
     fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
@@ -381,15 +379,6 @@ const styles = StyleSheet.create({
   },
   guestButton: {
     width: '100%',
-    marginBottom: spacing.lg,
-  },
-  guestLink: {
-    padding: spacing.sm,
-  },
-  guestLinkText: {
-    fontSize: typography.sizes.sm,
-    color: colors.primary,
-    textDecorationLine: 'underline',
   },
 });
 

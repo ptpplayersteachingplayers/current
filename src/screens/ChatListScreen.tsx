@@ -63,7 +63,7 @@ const ChatListScreen: React.FC<Props> = ({ navigation }) => {
       <EmptyState
         title="Sign in to message"
         message="Sign in to reach your trainers and the PTP support team."
-        icon="🔒"
+        iconName="lock-closed-outline"
       />
     );
   }
@@ -77,7 +77,7 @@ const ChatListScreen: React.FC<Props> = ({ navigation }) => {
       <EmptyState
         title="No Messages Yet"
         message="Start a conversation with your trainer or PTP Support to see it here."
-        icon="💬"
+        iconName="chatbubbles-outline"
       />
     );
   }

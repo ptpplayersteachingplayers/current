@@ -123,7 +123,7 @@ const ChatScreen: React.FC<Props> = ({ route, navigation }) => {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           isLoading ? null : (
-            <Text style={styles.emptyText}>Start the conversation with a hello 👋</Text>
+            <Text style={styles.emptyText}>Start the conversation with a hello</Text>
           )
         }
       />

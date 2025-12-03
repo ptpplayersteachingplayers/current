@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
 import { useSessionsQuery } from '../api/queries';
 import { useAuth } from '../context/AuthContext';
 import { Card, LoadingScreen, ErrorState, Badge, PrimaryButton } from '../components';
@@ -140,21 +141,21 @@ const ScheduleScreen: React.FC = () => {
       <View style={styles.detailsContainer}>
         {item.time && (
           <View style={styles.detailRow}>
-            <Text style={styles.detailIcon}>⏰</Text>
+            <Ionicons name="time-outline" size={14} color={colors.gray} style={styles.detailIcon} />
             <Text style={styles.detailText}>{item.time}</Text>
           </View>
         )}
 
         {item.location && (
           <View style={styles.detailRow}>
-            <Text style={styles.detailIcon}>📍</Text>
+            <Ionicons name="location-outline" size={14} color={colors.gray} style={styles.detailIcon} />
             <Text style={styles.detailText}>{item.location}</Text>
           </View>
         )}
 
         {item.trainer_name && (
           <View style={styles.detailRow}>
-            <Text style={styles.detailIcon}>🎯</Text>
+            <Ionicons name="person-outline" size={14} color={colors.gray} style={styles.detailIcon} />
             <Text style={styles.detailText}>Coach: {item.trainer_name}</Text>
           </View>
         )}
@@ -184,7 +185,7 @@ const ScheduleScreen: React.FC = () => {
     return (
       <View style={styles.guestContainer}>
         <View style={styles.guestIconContainer}>
-          <Text style={styles.guestIcon}>📅</Text>
+          <Ionicons name="calendar-outline" size={48} color={colors.gray} />
         </View>
         <Text style={styles.guestTitle}>Sign In to View Schedule</Text>
         <Text style={styles.guestSubtitle}>
@@ -223,7 +224,7 @@ const ScheduleScreen: React.FC = () => {
       <View style={styles.emptyContainer}>
         <View style={styles.emptyContent}>
           <View style={styles.emptyIconContainer}>
-            <Text style={styles.emptyIcon}>⚽</Text>
+            <Ionicons name="football-outline" size={36} color={colors.gray} />
           </View>
           <Text style={styles.emptyTitle}>No Upcoming Events</Text>
           <Text style={styles.emptyMessage}>
@@ -334,10 +335,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   detailIcon: {
-    fontSize: 14,
     marginRight: spacing.sm,
     width: 20,
-    textAlign: 'center',
   },
   detailText: {
     fontSize: typography.sizes.sm,
@@ -367,9 +366,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.lg,
-  },
-  emptyIcon: {
-    fontSize: 36,
   },
   emptyTitle: {
     fontSize: typography.sizes.xl,
@@ -408,9 +404,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.xl,
-  },
-  guestIcon: {
-    fontSize: 48,
   },
   guestTitle: {
     fontSize: typography.sizes.xl,

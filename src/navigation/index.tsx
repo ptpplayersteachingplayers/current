@@ -14,7 +14,8 @@ import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { LoadingScreen } from '../components';
 import { colors, typography } from '../theme';
@@ -62,32 +63,35 @@ interface TabIconProps {
   focused: boolean;
 }
 
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
+
 const TabIcon: React.FC<TabIconProps> = ({ label, focused }) => {
-  // Simple text-based icons (can be replaced with vector icons later)
-  const getIcon = (): string => {
+  const getIconName = (): IoniconsName => {
     switch (label) {
       case 'Home':
-        return '🏠';
+        return focused ? 'home' : 'home-outline';
       case 'Camps':
-        return '⚽';
+        return focused ? 'football' : 'football-outline';
       case 'Training':
-        return '🏃';
+        return focused ? 'fitness' : 'fitness-outline';
       case 'Schedule':
-        return '📅';
+        return focused ? 'calendar' : 'calendar-outline';
       case 'Messages':
-        return '💬';
+        return focused ? 'chatbubbles' : 'chatbubbles-outline';
       case 'Profile':
-        return '👤';
+        return focused ? 'person' : 'person-outline';
       default:
-        return '●';
+        return 'ellipse';
     }
   };
 
   return (
     <View style={styles.tabIconContainer}>
-      <Text style={[styles.tabIcon, focused && styles.tabIconFocused]}>
-        {getIcon()}
-      </Text>
+      <Ionicons
+        name={getIconName()}
+        size={22}
+        color={focused ? colors.primary : colors.gray}
+      />
     </View>
   );
 };
@@ -386,13 +390,6 @@ const styles = StyleSheet.create({
   tabIconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  tabIcon: {
-    fontSize: 20,
-    color: colors.gray,
-  },
-  tabIconFocused: {
-    color: colors.primary,
   },
 });
 

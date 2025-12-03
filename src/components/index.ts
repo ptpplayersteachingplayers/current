@@ -6,3 +6,4 @@ export { EmptyState } from './EmptyState';
 export { Badge } from './Badge';
 export { Card } from './Card';
 export { ImageCarousel } from './ImageCarousel';
+export { FilterBar } from './FilterBar';

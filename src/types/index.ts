@@ -235,6 +235,154 @@ export type MessagesStackParamList = {
 };
 
 // =============================================================================
+// Child Profile Types
+// =============================================================================
+
+export interface ChildProfile {
+  id: number;
+  parent_id: number;
+  name: string;
+  birth_date?: string;
+  age?: number;
+  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+  experience_level?: ExperienceLevel;
+  team?: string;
+  position?: string;
+  tshirt_size?: TShirtSize;
+  notes?: string;
+  medical_notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced' | 'competitive';
+
+export type TShirtSize = 'YXS' | 'YS' | 'YM' | 'YL' | 'YXL' | 'AS' | 'AM' | 'AL' | 'AXL';
+
+export interface CreateChildProfileRequest {
+  name: string;
+  birth_date?: string;
+  gender?: ChildProfile['gender'];
+  experience_level?: ExperienceLevel;
+  team?: string;
+  position?: string;
+  tshirt_size?: TShirtSize;
+  notes?: string;
+  medical_notes?: string;
+}
+
+export interface UpdateChildProfileRequest extends Partial<CreateChildProfileRequest> {
+  id: number;
+}
+
+// =============================================================================
+// Order Types
+// =============================================================================
+
+export interface Order {
+  id: number;
+  order_number: string;
+  status: OrderStatus;
+  total: string;
+  currency: string;
+  date_created: string;
+  date_paid?: string;
+  line_items: OrderLineItem[];
+  billing: OrderBilling;
+  meta_data?: OrderMeta[];
+}
+
+export type OrderStatus =
+  | 'pending'
+  | 'processing'
+  | 'on-hold'
+  | 'completed'
+  | 'cancelled'
+  | 'refunded'
+  | 'failed';
+
+export interface OrderLineItem {
+  id: number;
+  name: string;
+  product_id: number;
+  quantity: number;
+  subtotal: string;
+  total: string;
+  meta_data?: OrderMeta[];
+  child_name?: string;
+  child_age?: number;
+  event_date?: string;
+  event_time?: string;
+  event_location?: string;
+}
+
+export interface OrderBilling {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string;
+}
+
+export interface OrderMeta {
+  id: number;
+  key: string;
+  value: string;
+}
+
+// =============================================================================
+// Filter Types
+// =============================================================================
+
+export interface CampFilters {
+  category?: CampCategory | 'all';
+  state?: StateCode | 'all';
+  city?: string;
+  ageGroup?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: 'date' | 'price' | 'name';
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface TrainerFilters {
+  city?: string;
+  specialty?: string;
+  position?: string;
+}
+
+// =============================================================================
+// Schedule / Session Extended Types
+// =============================================================================
+
+export interface ScheduleItem extends Session {
+  child_name?: string;
+  order_id?: number;
+  product_id?: number;
+  check_in_time?: string;
+  check_out_time?: string;
+  notes?: string;
+}
+
+// =============================================================================
+// Navigation Types (Extended)
+// =============================================================================
+
+export type ProfileStackParamList = {
+  ProfileMain: undefined;
+  ChildProfiles: undefined;
+  AddChildProfile: undefined;
+  EditChildProfile: { child: ChildProfile };
+  OrderHistory: undefined;
+  OrderDetail: { order: Order };
+  Settings: undefined;
+};
+
+export type CheckoutParams = {
+  productUrl: string;
+  productName?: string;
+};
+
+// =============================================================================
 // Utility Types
 // =============================================================================
 
@@ -246,3 +394,33 @@ export interface LoadingState {
 export type DataState<T> = LoadingState & {
   data: T | null;
 };
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+// =============================================================================
+// Push Notification Types
+// =============================================================================
+
+export interface PushNotificationPayload {
+  title: string;
+  body: string;
+  data?: {
+    type: NotificationType;
+    screen?: string;
+    params?: Record<string, unknown>;
+  };
+}
+
+export type NotificationType =
+  | 'session_reminder'
+  | 'schedule_change'
+  | 'weather_alert'
+  | 'new_message'
+  | 'promotion'
+  | 'general';

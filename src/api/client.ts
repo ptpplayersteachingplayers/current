@@ -27,6 +27,11 @@ import {
   DeviceRegistrationResponse,
   ApiError,
   AppConfig,
+  ChildProfile,
+  CreateChildProfileRequest,
+  UpdateChildProfileRequest,
+  Order,
+  CampFilters,
 } from '../types';
 
 // =============================================================================
@@ -378,6 +383,197 @@ const normalizeSession = (raw: Partial<Session>): Session => {
     trainer_name: raw.trainer_name,
     status: raw.status ?? 'upcoming',
   };
+};
+
+/**
+ * Normalize child profile data with safe defaults
+ */
+const normalizeChildProfile = (raw: Partial<ChildProfile>): ChildProfile => {
+  return {
+    id: raw.id ?? 0,
+    parent_id: raw.parent_id ?? 0,
+    name: raw.name ?? 'Child',
+    birth_date: raw.birth_date,
+    age: raw.age,
+    gender: raw.gender,
+    experience_level: raw.experience_level,
+    team: raw.team,
+    position: raw.position,
+    tshirt_size: raw.tshirt_size,
+    notes: raw.notes,
+    medical_notes: raw.medical_notes,
+    created_at: raw.created_at,
+    updated_at: raw.updated_at,
+  };
+};
+
+/**
+ * Normalize order data with safe defaults
+ */
+const normalizeOrder = (raw: Partial<Order>): Order => {
+  return {
+    id: raw.id ?? 0,
+    order_number: raw.order_number ?? String(raw.id ?? 0),
+    status: raw.status ?? 'pending',
+    total: raw.total ?? '$0.00',
+    currency: raw.currency ?? 'USD',
+    date_created: raw.date_created ?? '',
+    date_paid: raw.date_paid,
+    line_items: raw.line_items ?? [],
+    billing: raw.billing ?? { first_name: '', last_name: '', email: '' },
+    meta_data: raw.meta_data,
+  };
+};
+
+// =============================================================================
+// Child Profile API Functions
+// =============================================================================
+
+/**
+ * Get all child profiles for the authenticated user
+ * Requires authentication
+ */
+export const getChildProfiles = async (): Promise<ChildProfile[]> => {
+  const response = await apiClient.get<ChildProfile[]>('/ptp/v1/children');
+
+  if (!Array.isArray(response.data)) {
+    console.warn('getChildProfiles: Expected array, got:', typeof response.data);
+    return [];
+  }
+
+  return response.data.map(normalizeChildProfile);
+};
+
+/**
+ * Get a single child profile by ID
+ * Requires authentication
+ */
+export const getChildProfile = async (childId: number): Promise<ChildProfile> => {
+  const response = await apiClient.get<ChildProfile>(`/ptp/v1/children/${childId}`);
+  return normalizeChildProfile(response.data);
+};
+
+/**
+ * Create a new child profile
+ * Requires authentication
+ */
+export const createChildProfile = async (
+  data: CreateChildProfileRequest
+): Promise<ChildProfile> => {
+  const response = await apiClient.post<ChildProfile>('/ptp/v1/children', data);
+  return normalizeChildProfile(response.data);
+};
+
+/**
+ * Update an existing child profile
+ * Requires authentication
+ */
+export const updateChildProfile = async (
+  data: UpdateChildProfileRequest
+): Promise<ChildProfile> => {
+  const { id, ...updateData } = data;
+  const response = await apiClient.put<ChildProfile>(
+    `/ptp/v1/children/${id}`,
+    updateData
+  );
+  return normalizeChildProfile(response.data);
+};
+
+/**
+ * Delete a child profile
+ * Requires authentication
+ */
+export const deleteChildProfile = async (childId: number): Promise<void> => {
+  await apiClient.delete(`/ptp/v1/children/${childId}`);
+};
+
+// =============================================================================
+// Order API Functions
+// =============================================================================
+
+/**
+ * Get all orders for the authenticated user
+ * Requires authentication
+ */
+export const getOrders = async (): Promise<Order[]> => {
+  const response = await apiClient.get<Order[]>('/ptp/v1/orders');
+
+  if (!Array.isArray(response.data)) {
+    console.warn('getOrders: Expected array, got:', typeof response.data);
+    return [];
+  }
+
+  return response.data.map(normalizeOrder);
+};
+
+/**
+ * Get a single order by ID
+ * Requires authentication
+ */
+export const getOrder = async (orderId: number): Promise<Order> => {
+  const response = await apiClient.get<Order>(`/ptp/v1/orders/${orderId}`);
+  return normalizeOrder(response.data);
+};
+
+// =============================================================================
+// Camps with Filters
+// =============================================================================
+
+/**
+ * Get camps with optional filters
+ * Public endpoint
+ */
+export const getCampsWithFilters = async (
+  filters?: CampFilters
+): Promise<Camp[]> => {
+  const params: Record<string, string | number | undefined> = {};
+
+  if (filters) {
+    if (filters.category && filters.category !== 'all') {
+      params.category = filters.category;
+    }
+    if (filters.state && filters.state !== 'all') {
+      params.state = filters.state;
+    }
+    if (filters.city) {
+      params.city = filters.city;
+    }
+    if (filters.ageGroup) {
+      params.age_group = filters.ageGroup;
+    }
+    if (filters.dateFrom) {
+      params.date_from = filters.dateFrom;
+    }
+    if (filters.dateTo) {
+      params.date_to = filters.dateTo;
+    }
+    if (filters.sortBy) {
+      params.orderby = filters.sortBy;
+    }
+    if (filters.sortOrder) {
+      params.order = filters.sortOrder;
+    }
+  }
+
+  const response = await apiClient.get<Camp[]>('/ptp/v1/camps', { params });
+
+  if (!Array.isArray(response.data)) {
+    console.warn('getCampsWithFilters: Expected array, got:', typeof response.data);
+    return [];
+  }
+
+  return response.data.map(normalizeCamp);
+};
+
+// =============================================================================
+// Password Reset
+// =============================================================================
+
+/**
+ * Request a password reset email
+ */
+export const requestPasswordReset = async (email: string): Promise<void> => {
+  await apiClient.post('/ptp/v1/password-reset', { email });
 };
 
 // =============================================================================

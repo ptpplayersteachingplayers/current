@@ -22,7 +22,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin version
-define('PTP_MOBILE_API_VERSION', '1.1.0');
+define('PTP_MOBILE_API_VERSION', '2.0.0');
 
 // Plugin directory path
 define('PTP_MOBILE_API_PATH', plugin_dir_path(__FILE__));
@@ -204,6 +204,102 @@ class PTP_Mobile_API {
                     },
                 ),
             ),
+        ));
+
+        // POST /ptp/v1/register - Register new user
+        register_rest_route($this->namespace, '/register', array(
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => array($this, 'register_user'),
+            'permission_callback' => '__return_true',
+            'args'                => array(
+                'email' => array(
+                    'required'          => true,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_email',
+                    'validate_callback' => 'is_email',
+                ),
+                'password' => array(
+                    'required'          => true,
+                    'type'              => 'string',
+                    'validate_callback' => function($param) {
+                        return strlen($param) >= 8;
+                    },
+                ),
+                'first_name' => array(
+                    'required'          => true,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ),
+                'last_name' => array(
+                    'required'          => true,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ),
+            ),
+        ));
+
+        // POST /ptp/v1/password-reset - Request password reset email
+        register_rest_route($this->namespace, '/password-reset', array(
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => array($this, 'request_password_reset'),
+            'permission_callback' => '__return_true',
+            'args'                => array(
+                'email' => array(
+                    'required'          => true,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_email',
+                    'validate_callback' => 'is_email',
+                ),
+            ),
+        ));
+
+        // GET /ptp/v1/orders - Get user's orders
+        register_rest_route($this->namespace, '/orders', array(
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => array($this, 'get_orders'),
+            'permission_callback' => array($this, 'require_login'),
+        ));
+
+        // GET /ptp/v1/orders/{id} - Get single order
+        register_rest_route($this->namespace, '/orders/(?P<id>\d+)', array(
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => array($this, 'get_order'),
+            'permission_callback' => array($this, 'require_login'),
+        ));
+
+        // GET /ptp/v1/children - Get user's child profiles
+        register_rest_route($this->namespace, '/children', array(
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => array($this, 'get_children'),
+            'permission_callback' => array($this, 'require_login'),
+        ));
+
+        // POST /ptp/v1/children - Create child profile
+        register_rest_route($this->namespace, '/children', array(
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => array($this, 'create_child'),
+            'permission_callback' => array($this, 'require_login'),
+        ));
+
+        // GET /ptp/v1/children/{id} - Get single child profile
+        register_rest_route($this->namespace, '/children/(?P<id>\d+)', array(
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => array($this, 'get_child'),
+            'permission_callback' => array($this, 'require_login'),
+        ));
+
+        // PUT /ptp/v1/children/{id} - Update child profile
+        register_rest_route($this->namespace, '/children/(?P<id>\d+)', array(
+            'methods'             => 'PUT',
+            'callback'            => array($this, 'update_child'),
+            'permission_callback' => array($this, 'require_login'),
+        ));
+
+        // DELETE /ptp/v1/children/{id} - Delete child profile
+        register_rest_route($this->namespace, '/children/(?P<id>\d+)', array(
+            'methods'             => WP_REST_Server::DELETABLE,
+            'callback'            => array($this, 'delete_child'),
+            'permission_callback' => array($this, 'require_login'),
         ));
     }
 
@@ -651,6 +747,416 @@ class PTP_Mobile_API {
             "SELECT user_id, token, platform FROM {$table}",
             ARRAY_A
         );
+    }
+
+    // =========================================================================
+    // User Registration
+    // =========================================================================
+
+    /**
+     * POST /ptp/v1/register
+     *
+     * Registers a new user (creates WooCommerce customer)
+     */
+    public function register_user($request) {
+        $email = $request->get_param('email');
+        $password = $request->get_param('password');
+        $first_name = $request->get_param('first_name');
+        $last_name = $request->get_param('last_name');
+
+        // Check if email already exists
+        if (email_exists($email)) {
+            return new WP_Error(
+                'email_exists',
+                __('An account with this email already exists.', 'ptp-mobile-api'),
+                array('status' => 400)
+            );
+        }
+
+        // Create user
+        $user_data = array(
+            'user_login'   => $email,
+            'user_email'   => $email,
+            'user_pass'    => $password,
+            'first_name'   => $first_name,
+            'last_name'    => $last_name,
+            'display_name' => $first_name . ' ' . $last_name,
+            'role'         => 'customer', // WooCommerce customer role
+        );
+
+        $user_id = wp_insert_user($user_data);
+
+        if (is_wp_error($user_id)) {
+            return new WP_Error(
+                'registration_failed',
+                $user_id->get_error_message(),
+                array('status' => 400)
+            );
+        }
+
+        // Create WooCommerce customer if WooCommerce is active
+        if (class_exists('WC_Customer')) {
+            $customer = new WC_Customer($user_id);
+            $customer->set_billing_first_name($first_name);
+            $customer->set_billing_last_name($last_name);
+            $customer->set_billing_email($email);
+            $customer->save();
+        }
+
+        // Send welcome email
+        wp_new_user_notification($user_id, null, 'user');
+
+        return rest_ensure_response(array(
+            'id'    => $user_id,
+            'email' => $email,
+            'name'  => $first_name . ' ' . $last_name,
+        ));
+    }
+
+    /**
+     * POST /ptp/v1/password-reset
+     *
+     * Sends password reset email
+     */
+    public function request_password_reset($request) {
+        $email = $request->get_param('email');
+        $user = get_user_by('email', $email);
+
+        if (!$user) {
+            // Don't reveal if email exists for security
+            return rest_ensure_response(array('success' => true));
+        }
+
+        // Generate reset key and send email
+        $reset_key = get_password_reset_key($user);
+
+        if (is_wp_error($reset_key)) {
+            return new WP_Error(
+                'reset_failed',
+                __('Unable to process password reset.', 'ptp-mobile-api'),
+                array('status' => 500)
+            );
+        }
+
+        // Send the email
+        $reset_url = network_site_url("wp-login.php?action=rp&key=$reset_key&login=" . rawurlencode($user->user_login), 'login');
+
+        $message = sprintf(__('Someone has requested a password reset for your PTP Soccer account.
+
+If this was you, click the link below to reset your password:
+%s
+
+If you didn\'t request this, you can safely ignore this email.
+
+Thanks,
+Players Teaching Players', 'ptp-mobile-api'), $reset_url);
+
+        $sent = wp_mail(
+            $email,
+            __('[PTP Soccer] Password Reset Request', 'ptp-mobile-api'),
+            $message
+        );
+
+        return rest_ensure_response(array('success' => true));
+    }
+
+    // =========================================================================
+    // Orders
+    // =========================================================================
+
+    /**
+     * GET /ptp/v1/orders
+     *
+     * Returns user's WooCommerce orders
+     */
+    public function get_orders($request) {
+        if (!class_exists('WooCommerce')) {
+            return new WP_Error(
+                'woocommerce_not_active',
+                __('WooCommerce is required.', 'ptp-mobile-api'),
+                array('status' => 500)
+            );
+        }
+
+        $user_id = get_current_user_id();
+
+        $orders = wc_get_orders(array(
+            'customer_id' => $user_id,
+            'limit'       => 50,
+            'orderby'     => 'date',
+            'order'       => 'DESC',
+        ));
+
+        $result = array();
+        foreach ($orders as $order) {
+            $result[] = $this->format_order($order);
+        }
+
+        return rest_ensure_response($result);
+    }
+
+    /**
+     * GET /ptp/v1/orders/{id}
+     *
+     * Returns single order
+     */
+    public function get_order($request) {
+        if (!class_exists('WooCommerce')) {
+            return new WP_Error(
+                'woocommerce_not_active',
+                __('WooCommerce is required.', 'ptp-mobile-api'),
+                array('status' => 500)
+            );
+        }
+
+        $order_id = absint($request->get_param('id'));
+        $order = wc_get_order($order_id);
+
+        if (!$order) {
+            return new WP_Error(
+                'order_not_found',
+                __('Order not found.', 'ptp-mobile-api'),
+                array('status' => 404)
+            );
+        }
+
+        // Verify ownership
+        if ($order->get_customer_id() !== get_current_user_id()) {
+            return new WP_Error(
+                'forbidden',
+                __('You cannot view this order.', 'ptp-mobile-api'),
+                array('status' => 403)
+            );
+        }
+
+        return rest_ensure_response($this->format_order($order));
+    }
+
+    /**
+     * Format WooCommerce order for API response
+     */
+    private function format_order($order) {
+        $line_items = array();
+        foreach ($order->get_items() as $item) {
+            $product_id = $item->get_product_id();
+
+            // Get camp/event meta
+            $child_name = $item->get_meta('_child_name');
+            $event_date = get_post_meta($product_id, '_camp_date', true);
+            $event_time = get_post_meta($product_id, '_camp_time', true);
+            $event_location = get_post_meta($product_id, '_camp_location', true);
+
+            $line_items[] = array(
+                'id'             => $item->get_id(),
+                'name'           => $item->get_name(),
+                'product_id'     => $product_id,
+                'quantity'       => $item->get_quantity(),
+                'subtotal'       => wc_price($item->get_subtotal()),
+                'total'          => wc_price($item->get_total()),
+                'child_name'     => $child_name ?: null,
+                'event_date'     => $event_date ?: null,
+                'event_time'     => $event_time ?: null,
+                'event_location' => $event_location ?: null,
+            );
+        }
+
+        return array(
+            'id'           => $order->get_id(),
+            'order_number' => $order->get_order_number(),
+            'status'       => $order->get_status(),
+            'total'        => $order->get_formatted_order_total(),
+            'currency'     => $order->get_currency(),
+            'date_created' => $order->get_date_created()->format('c'),
+            'date_paid'    => $order->get_date_paid() ? $order->get_date_paid()->format('c') : null,
+            'line_items'   => $line_items,
+            'billing'      => array(
+                'first_name' => $order->get_billing_first_name(),
+                'last_name'  => $order->get_billing_last_name(),
+                'email'      => $order->get_billing_email(),
+                'phone'      => $order->get_billing_phone(),
+            ),
+        );
+    }
+
+    // =========================================================================
+    // Child Profiles
+    // =========================================================================
+
+    /**
+     * GET /ptp/v1/children
+     *
+     * Returns all child profiles for current user
+     */
+    public function get_children($request) {
+        $user_id = get_current_user_id();
+        $children = get_user_meta($user_id, '_ptp_children', true);
+
+        if (!is_array($children)) {
+            $children = array();
+        }
+
+        // Add computed age to each child
+        foreach ($children as &$child) {
+            if (!empty($child['birth_date'])) {
+                $child['age'] = $this->calculate_age($child['birth_date']);
+            }
+        }
+
+        return rest_ensure_response(array_values($children));
+    }
+
+    /**
+     * GET /ptp/v1/children/{id}
+     *
+     * Returns single child profile
+     */
+    public function get_child($request) {
+        $child_id = absint($request->get_param('id'));
+        $user_id = get_current_user_id();
+        $children = get_user_meta($user_id, '_ptp_children', true);
+
+        if (!is_array($children) || !isset($children[$child_id])) {
+            return new WP_Error(
+                'child_not_found',
+                __('Child profile not found.', 'ptp-mobile-api'),
+                array('status' => 404)
+            );
+        }
+
+        $child = $children[$child_id];
+        if (!empty($child['birth_date'])) {
+            $child['age'] = $this->calculate_age($child['birth_date']);
+        }
+
+        return rest_ensure_response($child);
+    }
+
+    /**
+     * POST /ptp/v1/children
+     *
+     * Creates a new child profile
+     */
+    public function create_child($request) {
+        $user_id = get_current_user_id();
+        $children = get_user_meta($user_id, '_ptp_children', true);
+
+        if (!is_array($children)) {
+            $children = array();
+        }
+
+        // Generate new ID
+        $max_id = 0;
+        foreach ($children as $child) {
+            if (isset($child['id']) && $child['id'] > $max_id) {
+                $max_id = $child['id'];
+            }
+        }
+        $new_id = $max_id + 1;
+
+        $child = array(
+            'id'               => $new_id,
+            'parent_id'        => $user_id,
+            'name'             => sanitize_text_field($request->get_param('name')),
+            'birth_date'       => sanitize_text_field($request->get_param('birth_date')),
+            'gender'           => sanitize_text_field($request->get_param('gender')),
+            'experience_level' => sanitize_text_field($request->get_param('experience_level')),
+            'team'             => sanitize_text_field($request->get_param('team')),
+            'position'         => sanitize_text_field($request->get_param('position')),
+            'tshirt_size'      => sanitize_text_field($request->get_param('tshirt_size')),
+            'notes'            => sanitize_textarea_field($request->get_param('notes')),
+            'medical_notes'    => sanitize_textarea_field($request->get_param('medical_notes')),
+            'created_at'       => current_time('c'),
+            'updated_at'       => current_time('c'),
+        );
+
+        $children[$new_id] = $child;
+        update_user_meta($user_id, '_ptp_children', $children);
+
+        if (!empty($child['birth_date'])) {
+            $child['age'] = $this->calculate_age($child['birth_date']);
+        }
+
+        return rest_ensure_response($child);
+    }
+
+    /**
+     * PUT /ptp/v1/children/{id}
+     *
+     * Updates a child profile
+     */
+    public function update_child($request) {
+        $child_id = absint($request->get_param('id'));
+        $user_id = get_current_user_id();
+        $children = get_user_meta($user_id, '_ptp_children', true);
+
+        if (!is_array($children) || !isset($children[$child_id])) {
+            return new WP_Error(
+                'child_not_found',
+                __('Child profile not found.', 'ptp-mobile-api'),
+                array('status' => 404)
+            );
+        }
+
+        $child = $children[$child_id];
+
+        // Update fields if provided
+        $fields = array('name', 'birth_date', 'gender', 'experience_level', 'team', 'position', 'tshirt_size', 'notes', 'medical_notes');
+        foreach ($fields as $field) {
+            $value = $request->get_param($field);
+            if ($value !== null) {
+                $child[$field] = $field === 'notes' || $field === 'medical_notes'
+                    ? sanitize_textarea_field($value)
+                    : sanitize_text_field($value);
+            }
+        }
+
+        $child['updated_at'] = current_time('c');
+        $children[$child_id] = $child;
+        update_user_meta($user_id, '_ptp_children', $children);
+
+        if (!empty($child['birth_date'])) {
+            $child['age'] = $this->calculate_age($child['birth_date']);
+        }
+
+        return rest_ensure_response($child);
+    }
+
+    /**
+     * DELETE /ptp/v1/children/{id}
+     *
+     * Deletes a child profile
+     */
+    public function delete_child($request) {
+        $child_id = absint($request->get_param('id'));
+        $user_id = get_current_user_id();
+        $children = get_user_meta($user_id, '_ptp_children', true);
+
+        if (!is_array($children) || !isset($children[$child_id])) {
+            return new WP_Error(
+                'child_not_found',
+                __('Child profile not found.', 'ptp-mobile-api'),
+                array('status' => 404)
+            );
+        }
+
+        unset($children[$child_id]);
+        update_user_meta($user_id, '_ptp_children', $children);
+
+        return rest_ensure_response(array('deleted' => true));
+    }
+
+    /**
+     * Calculate age from birth date
+     */
+    private function calculate_age($birth_date) {
+        try {
+            $birth = new DateTime($birth_date);
+            $today = new DateTime();
+            $age = $today->diff($birth)->y;
+            return $age;
+        } catch (Exception $e) {
+            return null;
+        }
     }
 }
 

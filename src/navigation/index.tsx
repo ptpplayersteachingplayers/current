@@ -32,6 +32,11 @@ import OnboardingScreen, { checkOnboardingComplete } from '../screens/Onboarding
 import HomeScreen from '../screens/HomeScreen';
 import ChatListScreen from '../screens/ChatListScreen';
 import ChatScreen from '../screens/ChatScreen';
+import ChildProfilesScreen from '../screens/ChildProfilesScreen';
+import ChildProfileFormScreen from '../screens/ChildProfileFormScreen';
+import OrdersScreen from '../screens/OrdersScreen';
+import OrderDetailScreen from '../screens/OrderDetailScreen';
+import CheckoutScreen from '../screens/CheckoutScreen';
 
 // Types
 import {
@@ -41,6 +46,8 @@ import {
   CampsStackParamList,
   TrainingStackParamList,
   MessagesStackParamList,
+  ProfileStackParamList,
+  CheckoutParams,
 } from '../types';
 
 // =============================================================================
@@ -53,6 +60,8 @@ const MainTab = createBottomTabNavigator<MainTabParamList>();
 const CampsStackNav = createNativeStackNavigator<CampsStackParamList>();
 const TrainingStackNav = createNativeStackNavigator<TrainingStackParamList>();
 const MessagesStackNav = createNativeStackNavigator<MessagesStackParamList>();
+const ProfileStackNav = createNativeStackNavigator<ProfileStackParamList>();
+const CheckoutStackNav = createNativeStackNavigator<{ Checkout: CheckoutParams }>();
 
 // =============================================================================
 // Tab Icon Component
@@ -220,6 +229,59 @@ const MessagesStack: React.FC = () => {
 };
 
 // =============================================================================
+// Profile Stack
+// =============================================================================
+
+const ProfileStack: React.FC = () => {
+  return (
+    <ProfileStackNav.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: colors.white,
+        },
+        headerTintColor: colors.ink,
+        headerTitleStyle: {
+          fontWeight: typography.weights.semibold,
+        },
+        headerShadowVisible: false,
+        headerBackTitleVisible: false,
+      }}
+    >
+      <ProfileStackNav.Screen
+        name="ProfileMain"
+        component={ProfileScreen}
+        options={{ title: 'Profile' }}
+      />
+      <ProfileStackNav.Screen
+        name="ChildProfiles"
+        component={ChildProfilesScreen}
+        options={{ title: 'My Children' }}
+      />
+      <ProfileStackNav.Screen
+        name="AddChildProfile"
+        component={ChildProfileFormScreen}
+        options={{ title: 'Add Child' }}
+      />
+      <ProfileStackNav.Screen
+        name="EditChildProfile"
+        component={ChildProfileFormScreen}
+        options={{ title: 'Edit Child' }}
+      />
+      <ProfileStackNav.Screen
+        name="OrderHistory"
+        component={OrdersScreen}
+        options={{ title: 'Order History' }}
+      />
+      <ProfileStackNav.Screen
+        name="OrderDetail"
+        component={OrderDetailScreen}
+        options={{ title: 'Order Details' }}
+      />
+    </ProfileStackNav.Navigator>
+  );
+};
+
+// =============================================================================
 // Main Tabs (Authenticated users)
 // =============================================================================
 
@@ -310,22 +372,13 @@ const MainTabs: React.FC = () => {
       />
       <MainTab.Screen
         name="ProfileTab"
-        component={ProfileScreen}
+        component={ProfileStack}
         options={{
           tabBarLabel: 'Profile',
           tabBarIcon: ({ focused }) => (
             <TabIcon label="Profile" focused={focused} />
           ),
-          headerShown: true,
-          headerTitle: 'Profile',
-          headerStyle: {
-            backgroundColor: colors.white,
-          },
-          headerTintColor: colors.ink,
-          headerTitleStyle: {
-            fontWeight: typography.weights.semibold,
-          },
-          headerShadowVisible: false,
+          headerShown: false,
         }}
       />
     </MainTab.Navigator>

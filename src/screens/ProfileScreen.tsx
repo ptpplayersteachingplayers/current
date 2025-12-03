@@ -20,14 +20,17 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { Card, PrimaryButton } from '../components';
 import { colors, spacing, typography, borderRadius } from '../theme';
+import { ProfileStackParamList } from '../types';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
+type Props = NativeStackScreenProps<ProfileStackParamList, 'ProfileMain'>;
 
-const ProfileScreen: React.FC = () => {
+const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { user, logout, isLoading, isGuest } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -77,6 +80,14 @@ const ProfileScreen: React.FC = () => {
     Linking.openURL('https://ptpsummercamps.com/terms');
   };
 
+  const handleChildProfiles = () => {
+    navigation.navigate('ChildProfiles');
+  };
+
+  const handleOrderHistory = () => {
+    navigation.navigate('OrderHistory');
+  };
+
   const getInitials = (name: string): string => {
     const parts = name.split(' ');
     if (parts.length >= 2) {
@@ -124,6 +135,25 @@ const ProfileScreen: React.FC = () => {
 
           <Text style={styles.userName}>{user?.name || 'PTP User'}</Text>
           <Text style={styles.userEmail}>{user?.email || ''}</Text>
+        </View>
+
+        {/* My PTP Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>My PTP</Text>
+
+          <Card style={styles.menuCard} noPadding>
+            <MenuItem
+              iconName="people-outline"
+              label="My Children"
+              onPress={handleChildProfiles}
+            />
+            <View style={styles.menuDivider} />
+            <MenuItem
+              iconName="receipt-outline"
+              label="Order History"
+              onPress={handleOrderHistory}
+            />
+          </Card>
         </View>
 
         {/* Account Section */}

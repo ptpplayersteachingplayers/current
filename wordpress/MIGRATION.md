@@ -65,23 +65,40 @@ Redirects should be added for any that appear in live page content.
 | `ptp_trainer_dashboard`, `ptp_trainer_week`, `ptp_trainer_tasks`, `ptp_earnings_dashboard`, `ptp_earnings_card`, `ptp_payout_settings`, `ptp_trainer_profile_editor` | `[ptp_trainer_dashboard]` | |
 | `ptp_trainer_application`, `ptp_apply`, `ptp_coach_signup`, `ptp_trainer_onboarding`, `ptp_trainer_pending` | `[ptp_trainer_application]` | Applications now land as `pending`, never `active`. |
 
-### Dropped — decide before deleting the page
+### Dropped
 
-These have no replacement because they represent product lines that were built
-but appear unused (no menu entry, no linked page, or a superseded experiment).
-**Confirm each is genuinely dead before removing the WordPress page:**
+**Mentorship, memberships and referrals are not being ported** — decided, not
+pending. That is 37 files and 21,347 lines of the old codebase. The removal plan,
+including the tables that must be migrated rather than dropped, is in
+[DECOMMISSION.md](DECOMMISSION.md).
 
-- Membership / all-access: `ptp_membership_tiers`, `ptp_all_access`,
-  `ptp_member_dashboard`, `ptp_loyalty_dashboard` — the templates were never
-  referenced by the old bootstrap.
-- Mentorship (9 shortcodes): `ptp_mentorship*` — a complete parallel product.
-  Port only if it is still sold.
-- Referral / sharing (8 shortcodes): `ptp_referral*`, `ptp_share_buttons`,
-  `ptp_social_*`, `ptp_leaderboard` — rebuild as one feature if wanted.
+- Mentorship (9 shortcodes): `ptp_mentorship*`
+- Membership / all-access (4): `ptp_membership_tiers`, `ptp_all_access`,
+  `ptp_member_dashboard`, `ptp_loyalty_dashboard`
+- Referral / loyalty (2): `ptp_referral_leaderboard`, `ptp_referral_widget`
+
+Two caveats carried over from that document, because they change what "delete"
+means:
+
+- `ptp_mentorship_sessions` and `ptp_mentorship_pairs` hold **live 1-on-1
+  training data**, read by 14 files that are staying. They migrate into
+  `ptp_bookings`; they do not get dropped.
+- Referral codes are validated as **camp discount codes** at checkout today.
+  Export active codes into `ptp_discounts` before removing the referral system.
+
+Also dropped, unrelated to that decision:
+
 - Landing pages: `ptp_landing_36`, `ptp_landing_v3`, `ptp_landing_warm`,
   `ptp_landing_warm_v3`, `ptp_landing_warm_v6`, `ptp_world_cup_mobile` →
   all replaced by `[ptp_landing variant=""]` in ptp-marketing.
 - Diagnostics: `ptp_debug`, `ptp_group_audit` — diagnostics belong in admin.
+
+### Still open — not part of the drop decision
+
+`ptp_gift_cards` / `ptp_gift_card_balance` (a sellable product),
+`ptp_video_analysis`, and the post-booking share buttons sit adjacent to the
+removed features but are not the same thing. See the table at the end of
+DECOMMISSION.md.
 
 ---
 
@@ -148,6 +165,7 @@ Stripe's own reporting before trusting it.
 
 - **Which old checkout is live in production.** Needed to plan the cutover and
   to know which page/shortcode customers actually hit today.
-- **Whether mentorship, memberships and referrals are still sold.** They are ~15
-  shortcodes and several thousand lines; if they are live they need porting, and
-  if not they are the single largest deletion available.
+- **Gift cards, video analysis and post-booking share** — adjacent to the
+  dropped features but distinct products. See the end of DECOMMISSION.md.
+
+Resolved: mentorship, memberships and referrals are dropped (DECOMMISSION.md).

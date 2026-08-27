@@ -71,7 +71,11 @@ final class PTP_Core
     {
         PTP_Schema::maybe_upgrade();
         $this->stripe()->register_hooks();
+        $this->connect()->register_hooks();
+        (new PTP_Booking_Fulfilment())->register_hooks();
+        (new PTP_Training_Catalogue())->register();
         $this->mail()->register_hooks();
+        $this->api()->register_hooks();
 
         /**
          * Consumer plugins hook here rather than at plugins_loaded, which
@@ -108,6 +112,29 @@ final class PTP_Core
     public function stripe(): PTP_Stripe
     {
         return $this->service(PTP_Stripe::class);
+    }
+
+    /** Stripe Connect: trainer onboarding, the fee split, and payouts. */
+    public function connect(): PTP_Connect
+    {
+        return $this->service(PTP_Connect::class);
+    }
+
+    /** The REST surface the mobile app consumes. */
+    public function api(): PTP_Api
+    {
+        return $this->service(PTP_Api::class);
+    }
+
+    /** Computed booking slots. Stateless; safe to call freely. */
+    public function slots(): PTP_Slots
+    {
+        return $this->service(PTP_Slots::class);
+    }
+
+    public function availability(): PTP_Availability_Repository
+    {
+        return $this->service(PTP_Availability_Repository::class);
     }
 
     public function mail(): PTP_Mail

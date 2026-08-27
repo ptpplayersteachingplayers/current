@@ -61,6 +61,7 @@ final class PTP_Public
         'ptp_camp'             => PTP_Page_Camp_Detail::class,
         'ptp_trainers'         => PTP_Page_Trainers::class,
         'ptp_trainer'          => PTP_Page_Trainer_Detail::class,
+        'ptp_book'             => PTP_Page_Book::class,
         'ptp_clinics'          => PTP_Page_Clinics::class,
 
         // Buy
@@ -167,6 +168,23 @@ final class PTP_Public
         wp_register_script(
             'ptp-checkout',
             PTP_PUBLIC_URL . 'assets/js/ptp-checkout.js',
+            [],
+            PTP_PUBLIC_VERSION,
+            true
+        );
+
+        wp_register_script(
+            'ptp-booking',
+            PTP_PUBLIC_URL . 'assets/js/ptp-booking.js',
+            [],
+            PTP_PUBLIC_VERSION,
+            true
+        );
+
+        // Shared portal behaviour: the small AJAX actions both dashboards use.
+        wp_register_script(
+            'ptp-portal',
+            PTP_PUBLIC_URL . 'assets/js/ptp-portal.js',
             [],
             PTP_PUBLIC_VERSION,
             true

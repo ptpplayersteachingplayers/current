@@ -26,6 +26,7 @@ import CampsScreen from '../screens/CampsScreen';
 import CampDetailScreen from '../screens/CampDetailScreen';
 import TrainersScreen from '../screens/TrainersScreen';
 import TrainerDetailScreen from '../screens/TrainerDetailScreen';
+import BookSessionScreen from '../screens/BookSessionScreen';
 import ScheduleScreen from '../screens/ScheduleScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import OnboardingScreen, { checkOnboardingComplete } from '../screens/OnboardingScreen';
@@ -189,6 +190,13 @@ const TrainingStack: React.FC = () => {
         component={TrainerDetailScreen}
         options={{
           title: 'Trainer Profile',
+        }}
+      />
+      <TrainingStackNav.Screen
+        name="BookSession"
+        component={BookSessionScreen}
+        options={{
+          title: 'Book a Session',
         }}
       />
     </TrainingStackNav.Navigator>

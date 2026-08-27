@@ -132,4 +132,48 @@ final class PTP_Bookings_Repository extends PTP_Repository
             ['%s', '%s']
         );
     }
+
+    /**
+     * Mark a session delivered.
+     *
+     * This is what releases the trainer's payout, so the transition is guarded
+     * in SQL: only a confirmed booking becomes completed, and a repeated call
+     * updates zero rows rather than firing the payout hook twice.
+     */
+    public function mark_completed(int $booking_id): void
+    {
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- conditional transition must be atomic
+        $updated = $this->db()->query(
+            $this->db()->prepare(
+                'UPDATE ' . $this->table() . ' SET status = %s, updated_at = %s WHERE id = %d AND status = %s',
+                'completed',
+                $this->now(),
+                $booking_id,
+                'confirmed'
+            )
+        );
+
+        if ((int) $updated === 1) {
+            do_action('ptp_booking_completed', $booking_id);
+        }
+    }
+
+    /** Sessions a trainer has delivered but not yet marked complete. */
+    public function awaiting_completion(PTP_Actor $actor, int $limit = 25): array
+    {
+        if (!$actor->is(PTP_Guard::ROLE_TRAINER) || $actor->id() === null) {
+            return [];
+        }
+
+        return $this->db()->get_results(
+            $this->db()->prepare(
+                'SELECT * FROM ' . $this->table()
+                . ' WHERE trainer_id = %d AND status = %s AND starts_at < %s ORDER BY starts_at DESC LIMIT %d',
+                (int) $actor->id(),
+                'confirmed',
+                $this->now(),
+                $limit
+            )
+        ) ?: [];
+    }
 }

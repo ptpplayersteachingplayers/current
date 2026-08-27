@@ -13,6 +13,8 @@ wordpress/
 
 Documents, in the order you need them:
 
+- **[TRAINING.md](TRAINING.md)** — the training side: booking flow, availability,
+  Stripe money map, both portals, and the mobile app's endpoints.
 - **[EVALUATION.md](EVALUATION.md)** — honest assessment: what is tested, what
   is missing, two real bugs the tests caught, and whether this is worth keeping.
 - **[SCOPE.md](SCOPE.md)** — what the platform is and what it is not. Read
@@ -107,13 +109,13 @@ Templates receive `$data` and escape on output. Pages never echo directly.
 ## Verifying a change
 
 ```bash
-php tests/run.php                                  # 64 assertions, no deps
+php tests/run.php                                  # 112 assertions, no deps
 find . -name '*.php' -exec php -l {} \;            # syntax
 ```
 
 The test suite stubs WordPress, so it needs no database and no install. It
-covers the code that decides what a customer is charged: pricing, quotes,
-discounts, webhook signatures and actor authorisation. Add to it whenever you
-touch any of those.
+covers the code that decides what a customer is charged or paid: pricing,
+quotes, discounts, webhook signatures, actor authorisation, slot generation and
+the trainer fee split. Add to it whenever you touch any of those.
 
 There is no build step; assets are plain CSS and dependency-free JavaScript.

@@ -28,6 +28,11 @@ final class PTP_Public_Links
         return self::page('ptp_page_camps');
     }
 
+    public static function book(): string
+    {
+        return self::page('ptp_page_book');
+    }
+
     public static function dashboard(): string
     {
         return self::page('ptp_page_dashboard');

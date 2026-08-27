@@ -75,14 +75,43 @@ class WPDB_Stub {
     }
     public function get_row($sql) { return $this->lookup($sql); }
     public function get_var($sql) { $r = $this->lookup($sql); return $r ? reset($r) : null; }
-    public function get_results($sql) { return []; }
-    public function get_col($sql) { return []; }
+    /**
+     * Route results by the table named in the SQL, so a class that issues
+     * several queries in one call (PTP_Slots reads rules, exceptions and
+     * bookings) gets the right fixture for each rather than one shared queue.
+     *
+     * Set $GLOBALS['__rows']['availability'] = [...] to seed a table.
+     */
+    public function get_results($sql) {
+        foreach (($GLOBALS['__rows'] ?? []) as $table => $rows) {
+            if (strpos($sql, 'ptp_' . $table) !== false) { return $rows; }
+        }
+        return $GLOBALS['__next_results'] ?? [];
+    }
+    public function get_col($sql) {
+        foreach (($GLOBALS['__cols'] ?? []) as $table => $rows) {
+            if (strpos($sql, 'ptp_' . $table) !== false) { return $rows; }
+        }
+        return $GLOBALS['__next_col'] ?? [];
+    }
     public function query($sql) { $this->queries[] = $sql; return 1; }
     public function insert($t, $d, $f = null) { $this->rows[$t][] = (object) $d; $this->insert_id = count($this->rows[$t] ?? []); return 1; }
     public function update($t, $d, $w, $df = null, $wf = null) { $this->queries[] = "UPDATE $t"; return 1; }
     private function lookup($sql) { return $GLOBALS['__next_row'] ?? null; }
 }
 $GLOBALS['wpdb'] = new WPDB_Stub();
+
+// ---- extra WP stubs used by the training side --------------------------------
+function wp_validate_redirect($url, $fallback = '/') { return $url ?: $fallback; }
+function home_url($path = '/') { return 'https://example.test' . $path; }
+function add_query_arg($k, $v, $url) { return $url . (strpos($url, '?') === false ? '?' : '&') . $k . '=' . rawurlencode((string) $v); }
+function is_ssl() { return true; }
+function wp_remote_request($url, $args) { return $GLOBALS['__http'] ?? ['body' => '{}']; }
+function wp_remote_retrieve_body($r) { return is_array($r) ? ($r['body'] ?? '') : ''; }
+function is_wp_error($t) { return $t instanceof WP_Error; }
+class WP_Error { public function __construct(public $c = '', public $m = '') {} public function get_error_message() { return $this->m; } }
+if (!defined('COOKIEPATH')) { define('COOKIEPATH', '/'); }
+if (!defined('COOKIE_DOMAIN')) { define('COOKIE_DOMAIN', ''); }
 
 // ---- load PTP core -----------------------------------------------------------
 $core = dirname(__DIR__) . '/ptp-core/includes/';
@@ -93,6 +122,7 @@ foreach ([
     'class-ptp-discounts.php', 'class-ptp-discount.php', 'class-ptp-order.php',
     'repositories/class-ptp-repository.php', 'repositories/class-ptp-repository-exception.php',
     'services/class-ptp-stripe.php', 'services/class-ptp-stripe-exception.php',
+    'services/class-ptp-connect.php', 'class-ptp-slots.php', 'class-ptp-booking-intent.php',
 ] as $f) { require_once $core . $f; }
 
 // ---- ptp_core() container stub ------------------------------------------------
@@ -122,6 +152,10 @@ final class FakeCore {
     public function parents(): FakeRepo { return $this->parents; }
     public function trainers(): FakeRepo { return $this->trainers; }
     public function players(): FakeRepo { return $this->players; }
+    public function slots(): PTP_Slots { return $this->slots ??= new PTP_Slots(); }
+    public function connect(): PTP_Connect { return $this->connect ??= new PTP_Connect(); }
+    private ?PTP_Slots $slots = null;
+    private ?PTP_Connect $connect = null;
 }
 $GLOBALS['__core'] = new FakeCore();
 function ptp_core(): FakeCore { return $GLOBALS['__core']; }

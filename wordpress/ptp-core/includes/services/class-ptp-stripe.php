@@ -107,6 +107,82 @@ final class PTP_Stripe
         return $this->request('payment_intents/' . rawurlencode($intent_id), null, 'GET');
     }
 
+    // -- Connect ---------------------------------------------------------------
+
+    /**
+     * Create a connected account for a trainer.
+     *
+     * Express accounts: Stripe hosts onboarding and identity verification, so
+     * PTP never handles a trainer's bank details or tax information.
+     *
+     * @param array<string, string> $metadata
+     * @return array<string, mixed>
+     */
+    public function create_connected_account(array $metadata = []): array
+    {
+        return $this->request('accounts', [
+            'type'         => 'express',
+            'capabilities' => ['transfers' => ['requested' => 'true']],
+            'metadata'     => $metadata,
+        ]);
+    }
+
+    /**
+     * Single-use hosted onboarding link.
+     *
+     * Both URLs are validated as same-host before they are sent, so a tampered
+     * return path cannot bounce a trainer to an attacker's page mid-onboarding.
+     *
+     * @return array<string, mixed>
+     */
+    public function create_account_link(string $account_id, string $return_url): array
+    {
+        $safe = wp_validate_redirect($return_url, home_url('/'));
+
+        return $this->request('account_links', [
+            'account'     => $account_id,
+            'refresh_url' => $safe,
+            'return_url'  => $safe,
+            'type'        => 'account_onboarding',
+        ]);
+    }
+
+    /**
+     * Move funds from the platform balance to a connected account.
+     *
+     * Called only after a session is delivered. The idempotency key is derived
+     * from the booking so a repeated call cannot pay a trainer twice.
+     *
+     * @param array<string, string> $metadata
+     * @return array<string, mixed>
+     */
+    public function create_transfer(int $amount_cents, string $destination, array $metadata = []): array
+    {
+        if ($amount_cents <= 0) {
+            throw new PTP_Stripe_Exception(__('Nothing to transfer.', 'ptp'));
+        }
+
+        $booking_ref = $metadata['ptp_booking_id'] ?? '';
+
+        return $this->request(
+            'transfers',
+            [
+                'amount'      => $amount_cents,
+                'currency'    => 'usd',
+                'destination' => $destination,
+                'metadata'    => $metadata,
+            ],
+            'POST',
+            $booking_ref !== '' ? 'ptp_payout_' . $booking_ref : null
+        );
+    }
+
+    /** @return array<string, mixed> */
+    public function retrieve_account(string $account_id): array
+    {
+        return $this->request('accounts/' . rawurlencode($account_id), null, 'GET');
+    }
+
     /**
      * Webhook entry point. Nothing is trusted until the signature verifies.
      */
@@ -230,7 +306,7 @@ final class PTP_Stripe
      * @param array<string, mixed>|null $body
      * @return array<string, mixed>
      */
-    private function request(string $path, ?array $body = null, string $method = 'POST'): array
+    private function request(string $path, ?array $body = null, string $method = 'POST', ?string $idempotency_key = null): array
     {
         $secret = $this->secret_key();
 
@@ -241,11 +317,14 @@ final class PTP_Stripe
         $args = [
             'method'  => $method,
             'timeout' => 20,
-            'headers' => [
-                'Authorization'  => 'Bearer ' . $secret,
-                'Content-Type'   => 'application/x-www-form-urlencoded',
-                'Stripe-Version' => '2024-06-20',
-            ],
+            'headers' => array_filter([
+                'Authorization'   => 'Bearer ' . $secret,
+                'Content-Type'    => 'application/x-www-form-urlencoded',
+                'Stripe-Version'  => '2024-06-20',
+                // Stripe deduplicates retries carrying the same key for 24h,
+                // which is what stops a network timeout paying a trainer twice.
+                'Idempotency-Key' => $idempotency_key,
+            ]),
         ];
 
         if ($body !== null) {

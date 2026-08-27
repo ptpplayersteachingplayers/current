@@ -25,6 +25,12 @@ final class PTP_Page_Parent_Dashboard extends PTP_Page
         return 'parent-dashboard';
     }
 
+    protected function enqueue(): void
+    {
+        parent::enqueue();
+        wp_enqueue_script('ptp-portal');
+    }
+
     protected function data(array $atts): array
     {
         $actor = $this->actor();
@@ -41,6 +47,7 @@ final class PTP_Page_Parent_Dashboard extends PTP_Page
             'orders'         => ptp_core()->orders()->history_for($actor),
             'cancel_action'  => self::AJAX_CANCEL,
             'cancel_nonce'   => $this->nonce(self::AJAX_CANCEL),
+            'book_url'       => PTP_Public_Links::book(),
         ];
     }
 

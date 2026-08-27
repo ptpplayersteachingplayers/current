@@ -378,3 +378,113 @@
     white-space: nowrap;
     border: 0;
 }
+
+/* ============================================================== Booking === */
+
+.ptp-slots__day + .ptp-slots__day {
+    margin-top: var(--ptp-space-5);
+}
+
+.ptp-slots__date {
+    font-family: var(--ptp-font-display);
+    font-size: var(--ptp-text-sm);
+    text-transform: uppercase;
+    letter-spacing: var(--ptp-tracking-caps);
+    color: var(--ptp-text-muted);
+    margin: 0 0 var(--ptp-space-3);
+}
+
+.ptp-slots__times {
+    display: grid;
+    gap: var(--ptp-space-3);
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
+.ptp-slot {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 64px;
+    padding: var(--ptp-space-3);
+    border: 2px solid var(--ptp-border);
+    border-radius: var(--ptp-radius);
+    background: var(--ptp-surface);
+    color: var(--ptp-text);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--ptp-transition), background-color var(--ptp-transition);
+}
+
+.ptp-slot:hover {
+    border-color: var(--ptp-gold);
+}
+
+.ptp-slot:focus-visible {
+    outline: 3px solid var(--ptp-info);
+    outline-offset: 2px;
+}
+
+.ptp-slot--selected {
+    border-color: var(--ptp-gold);
+    background: var(--ptp-gold-soft);
+}
+
+.ptp-slot__time {
+    font-family: var(--ptp-font-display);
+    font-size: var(--ptp-text-lg);
+}
+
+.ptp-slot__meta {
+    font-size: var(--ptp-text-xs);
+    color: var(--ptp-text-muted);
+}
+
+/* ================================================== Portal stat tiles === */
+
+.ptp-stats {
+    display: grid;
+    gap: var(--ptp-space-4);
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    margin-bottom: var(--ptp-space-4);
+}
+
+.ptp-stat {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ptp-space-1);
+    padding: var(--ptp-space-4);
+    background: var(--ptp-surface-sunken);
+    border-radius: var(--ptp-radius);
+}
+
+.ptp-stat__value {
+    font-family: var(--ptp-font-display);
+    font-size: var(--ptp-text-2xl);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.ptp-stat__label {
+    font-size: var(--ptp-text-sm);
+    color: var(--ptp-text-muted);
+}
+
+/* Availability editor: a row on desktop, stacked on mobile. */
+.ptp-availability-form {
+    display: grid;
+    gap: var(--ptp-space-3);
+    align-items: end;
+    margin-top: var(--ptp-space-5);
+    padding-top: var(--ptp-space-5);
+    border-top: 1px solid var(--ptp-border);
+}
+
+@media (min-width: 760px) {
+    .ptp-availability-form {
+        grid-template-columns: repeat(5, 1fr) auto;
+    }
+
+    .ptp-availability-form .ptp-field {
+        margin-bottom: 0;
+    }
+}

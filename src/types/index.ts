@@ -227,6 +227,7 @@ export type CampsStackParamList = {
 export type TrainingStackParamList = {
   Trainers: undefined;
   TrainerDetail: { trainer: Trainer };
+  BookSession: { trainerId: number };
 };
 
 export type MessagesStackParamList = {

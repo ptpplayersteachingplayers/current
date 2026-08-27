@@ -30,7 +30,12 @@ endif; ?>
         <h2 class="ptp-panel__title"><?php esc_html_e('Upcoming sessions', 'ptp'); ?></h2>
 
         <?php if (empty($data['bookings'])) : ?>
-            <p class="ptp-empty"><?php esc_html_e('Nothing booked yet.', 'ptp'); ?></p>
+            <div class="ptp-empty ptp-stack">
+                <p><?php esc_html_e('Nothing booked yet.', 'ptp'); ?></p>
+                <a class="ptp-btn ptp-btn--primary" href="<?php echo esc_url($data['book_url']); ?>">
+                    <?php esc_html_e('Book a session', 'ptp'); ?>
+                </a>
+            </div>
         <?php else : ?>
             <ul class="ptp-list">
                 <?php foreach ($data['bookings'] as $booking) : ?>
@@ -45,11 +50,13 @@ endif; ?>
                             </span>
                         </div>
                         <button
-                            class="ptp-btn ptp-btn--ghost js-ptp-cancel"
+                            class="ptp-btn ptp-btn--ghost js-ptp-action"
                             type="button"
-                            data-booking="<?php echo esc_attr((string) $booking->id); ?>"
                             data-action="<?php echo esc_attr($data['cancel_action']); ?>"
-                            data-nonce="<?php echo esc_attr($data['cancel_nonce']); ?>">
+                            data-nonce="<?php echo esc_attr($data['cancel_nonce']); ?>"
+                            data-field-booking_id="<?php echo esc_attr((string) $booking->id); ?>"
+                            data-confirm="<?php esc_attr_e('Cancel this session?', 'ptp'); ?>"
+                            data-reload="1">
                             <?php esc_html_e('Cancel', 'ptp'); ?>
                         </button>
                     </li>

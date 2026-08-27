@@ -26,7 +26,7 @@ if (!defined('ABSPATH')) {
 final class PTP_Schema
 {
     /** Bump to trigger dbDelta on the next request after deploy. */
-    public const VERSION = '1.0.0';
+    public const VERSION = '1.1.0';
 
     private const OPTION_VERSION = 'ptp_schema_version';
 
@@ -102,6 +102,9 @@ final class PTP_Schema
         $redeems   = self::table('discount_redemptions');
         $idem      = self::table('idempotency');
         $events    = self::table('events');
+        $avail     = self::table('availability');
+        $avex      = self::table('availability_exceptions');
+        $payouts   = self::table('payouts');
 
         return [
             // Customer identity. One row per household, linked to a WP user.
@@ -252,6 +255,67 @@ final class PTP_Schema
                 claimed_at DATETIME NOT NULL,
                 PRIMARY KEY (id),
                 UNIQUE KEY claim_key (claim_key)
+            ) {$charset};",
+
+            /**
+             * Recurring weekly availability. One row per trainer per weekday
+             * block, e.g. "Tuesdays 16:00-20:00 at Riverside Park".
+             *
+             * Times are stored as local wall-clock strings, not UTC: a trainer
+             * who says "I coach Tuesday evenings" means 4pm local, and that
+             * should not shift by an hour when the clocks change.
+             */
+            "CREATE TABLE {$avail} (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                trainer_id BIGINT UNSIGNED NOT NULL,
+                weekday TINYINT UNSIGNED NOT NULL,
+                starts_time TIME NOT NULL,
+                ends_time TIME NOT NULL,
+                location VARCHAR(190) NOT NULL DEFAULT '',
+                slot_minutes SMALLINT UNSIGNED NOT NULL DEFAULT 60,
+                active TINYINT(1) NOT NULL DEFAULT 1,
+                created_at DATETIME NOT NULL,
+                PRIMARY KEY (id),
+                KEY trainer_weekday (trainer_id, weekday)
+            ) {$charset};",
+
+            /**
+             * One-off overrides: a holiday closing a normally-open day, or an
+             * extra Saturday opened for a tournament week.
+             */
+            "CREATE TABLE {$avex} (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                trainer_id BIGINT UNSIGNED NOT NULL,
+                on_date DATE NOT NULL,
+                kind VARCHAR(10) NOT NULL DEFAULT 'block',
+                starts_time TIME DEFAULT NULL,
+                ends_time TIME DEFAULT NULL,
+                location VARCHAR(190) NOT NULL DEFAULT '',
+                note VARCHAR(190) NOT NULL DEFAULT '',
+                created_at DATETIME NOT NULL,
+                PRIMARY KEY (id),
+                UNIQUE KEY trainer_date_kind (trainer_id, on_date, kind, starts_time)
+            ) {$charset};",
+
+            /**
+             * Trainer earnings ledger. One row per booking that owes a trainer
+             * money, settled when the session completes.
+             */
+            "CREATE TABLE {$payouts} (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                trainer_id BIGINT UNSIGNED NOT NULL,
+                booking_id BIGINT UNSIGNED NOT NULL,
+                gross_cents INT UNSIGNED NOT NULL DEFAULT 0,
+                platform_fee_cents INT UNSIGNED NOT NULL DEFAULT 0,
+                net_cents INT UNSIGNED NOT NULL DEFAULT 0,
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                stripe_transfer_id VARCHAR(64) NOT NULL DEFAULT '',
+                available_at DATETIME DEFAULT NULL,
+                paid_at DATETIME DEFAULT NULL,
+                created_at DATETIME NOT NULL,
+                PRIMARY KEY (id),
+                UNIQUE KEY booking_id (booking_id),
+                KEY trainer_status (trainer_id, status)
             ) {$charset};",
 
             // Append-only audit trail. Replaces the ad-hoc ptp_log writes.

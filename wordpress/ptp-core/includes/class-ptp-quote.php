@@ -92,8 +92,25 @@ final class PTP_Quote
         return time() > $this->expires_at;
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * @return array<string, mixed>
+     *
+     * Carries a signature over its own contents. The quote is cached
+     * server-side, so this is not defence against the browser — it is defence
+     * against anything that can write to the object cache (a shared or
+     * compromised Redis, another plugin, a stray CLI script). Without it, a
+     * total rewritten in the cache would be trusted verbatim on re-read.
+     */
     public function to_array(): array
+    {
+        $data = $this->payload();
+        $data['signature'] = self::sign($data);
+
+        return $data;
+    }
+
+    /** The signed fields, in a fixed order so the digest is reproducible. */
+    private function payload(): array
     {
         return [
             'id'             => $this->id,
@@ -104,6 +121,34 @@ final class PTP_Quote
             'user_id'        => $this->user_id,
             'expires_at'     => $this->expires_at,
         ];
+    }
+
+    /**
+     * Sign a quote payload.
+     *
+     * Keyed on WordPress's own AUTH_SALT so the secret is already unique per
+     * install and already outside the database. A site with default salts is
+     * insecure for many other reasons first.
+     */
+    public static function sign(array $data): string
+    {
+        unset($data['signature']);
+
+        $secret = defined('AUTH_SALT') && AUTH_SALT ? AUTH_SALT : 'ptp-quote-fallback';
+
+        return hash_hmac('sha256', (string) wp_json_encode($data), $secret);
+    }
+
+    /** True when the payload's signature matches its contents. */
+    public static function verify(array $data): bool
+    {
+        $claimed = isset($data['signature']) ? (string) $data['signature'] : '';
+
+        if ($claimed === '') {
+            return false;
+        }
+
+        return hash_equals(self::sign($data), $claimed);
     }
 
     /** @param array<string, mixed> $data */

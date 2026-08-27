@@ -109,13 +109,13 @@ Templates receive `$data` and escape on output. Pages never echo directly.
 ## Verifying a change
 
 ```bash
-php tests/run.php                                  # 112 assertions, no deps
+php tests/run.php                                  # 115 assertions, no deps
 find . -name '*.php' -exec php -l {} \;            # syntax
 ```
 
 The test suite stubs WordPress, so it needs no database and no install. It
 covers the code that decides what a customer is charged or paid: pricing,
 quotes, discounts, webhook signatures, actor authorisation, slot generation and
-the trainer fee split. Add to it whenever you touch any of those.
+trainer payouts. Add to it whenever you touch any of those.
 
 There is no build step; assets are plain CSS and dependency-free JavaScript.

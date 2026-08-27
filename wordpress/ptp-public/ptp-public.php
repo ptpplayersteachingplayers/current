@@ -168,7 +168,7 @@ final class PTP_Public
         wp_register_script(
             'ptp-checkout',
             PTP_PUBLIC_URL . 'assets/js/ptp-checkout.js',
-            [],
+            ['stripe-js'],
             PTP_PUBLIC_VERSION,
             true
         );

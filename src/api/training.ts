@@ -68,10 +68,13 @@ export interface PlayerSummary {
 }
 
 export interface TrainerEarnings {
-  pending_cents: number;
-  clearing_cents: number;
-  paid_cents: number;
+  pendingCents: number;
+  clearingCents: number;
+  paidCents: number;
   connected: boolean;
+  /** What this trainer earns per session (or per hour), assigned by staff. */
+  rateCents: number;
+  rateBasis: 'session' | 'hour';
 }
 
 export interface AvailabilityRule {

@@ -75,6 +75,23 @@ $actions  = $data['actions'];
             </div>
         </div>
 
+        <?php if ((int) $earnings['rate_cents'] > 0) : ?>
+            <p class="ptp-muted">
+                <?php
+                printf(
+                    /* translators: 1: amount, 2: "session" or "hour" */
+                    esc_html__('You earn %1$s per %2$s.', 'ptp'),
+                    esc_html('$' . number_format($earnings['rate_cents'] / 100, 2)),
+                    esc_html($earnings['rate_basis'] === 'hour' ? __('hour', 'ptp') : __('session', 'ptp'))
+                );
+                ?>
+            </p>
+        <?php else : ?>
+            <p class="ptp-muted">
+                <?php esc_html_e('Your rate has not been set yet — we will sort that before your first payout.', 'ptp'); ?>
+            </p>
+        <?php endif; ?>
+
         <?php if (empty($earnings['connected'])) : ?>
             <div class="ptp-notice">
                 <p><?php esc_html_e('Connect a payout account to receive your earnings. We never see your bank details — Stripe handles it.', 'ptp'); ?></p>

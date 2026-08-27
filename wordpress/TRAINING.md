@@ -69,8 +69,36 @@ is written, because two parents can load the same page at once.
 
 ```
 parent pays  ──►  PTP platform account  ──►  trainer connected account
-                  (keeps platform fee)       (receives net, on completion)
+                  (keeps the remainder)      (receives their set amount)
 ```
+
+**Trainers are paid a fixed amount you assign to each of them — not a
+percentage.** Two independent figures:
+
+| Field | Meaning |
+|---|---|
+| `trainers.hourly_cents` | What the **parent** is charged, per hour |
+| `trainers.payout_cents` | What **this trainer** earns |
+| `trainers.payout_basis` | `session` (flat, default) or `hour` (pro-rated) |
+
+The platform keeps the difference. They are independent on purpose: raising a
+trainer's rate does not raise what parents pay, and discounting a session does
+not quietly cut the trainer's pay. **You absorb a discount; you keep the
+upside.** Both are set on the Trainers admin screen, side by side, with the
+one-hour margin shown next to them.
+
+`payout_basis` exists because sessions vary in length. A flat `session` amount
+pays the same for 30 or 90 minutes; `hour` pro-rates. Default is `session` —
+switch a trainer to `hour` if their longer sessions should pay more.
+
+Two conditions are surfaced rather than absorbed:
+
+- **No rate set** — `ptp_trainer_payout_unset` fires, the Trainers screen shows
+  a warning banner, and no ledger row is written. The session still happened
+  and is still owed; staff set the rate and it can be paid.
+- **Payout exceeds the charge** — `ptp_payout_exceeds_charge` fires. The trainer
+  is still paid what they were promised; the platform share floors at zero
+  rather than going negative, and the session is flagged for review.
 
 The charge is taken on the **PTP account**, not the trainer's. Deliberately:
 
@@ -82,10 +110,10 @@ The charge is taken on the **PTP account**, not the trainer's. Deliberately:
 
 | | |
 |---|---|
-| Platform fee | 25% default, `ptp_platform_fee_bps` option, `ptp_platform_fee_bps` filter |
 | Clearance | 7 days after the session, leaving room for disputes |
 | Onboarding | Stripe Express — PTP never sees a trainer's bank details, only the `acct_…` id |
 | Transfer trigger | `ptp_booking_completed`, **not** `ptp_order_paid` |
+| Per-trainer override | `ptp_trainer_payout_cents` filter, for a one-off arrangement |
 
 The ledger row is written when the parent pays, so a trainer sees pending
 earnings immediately — but no money moves until the work is done.
@@ -95,9 +123,9 @@ index on `booking_id`, `mark_completed()` only transitions a *confirmed*
 booking, and the Stripe transfer carries an idempotency key derived from the
 booking id. A network timeout cannot pay a trainer twice.
 
-**Fee arithmetic is tested for exact reconciliation** — `fee + net == gross` at
-every amount, with no cent lost to rounding, and a misconfigured fee above 100%
-or below 0% is clamped rather than inverting the split.
+**Payout arithmetic is tested for exact reconciliation** — `payout + platform ==
+gross` at every amount, with no cent invented or lost to hourly pro-rating, and
+negative rates, grosses and durations clamped rather than inverting a transfer.
 
 ---
 
@@ -182,13 +210,16 @@ Training-specific coverage:
   chronological ordering, horizon and notice clamping, a booked slot removed
   from the list, a blocked date clearing the day, and `is_bookable()` rejecting
   a 3am start and an off-boundary start.
-- **Payouts (20)** — the fee split reconciling exactly at eight different
-  amounts, configured fees honoured, and out-of-range fees clamped rather than
-  inverting the split or paying out more than was taken.
+- **Payouts (28)** — the assigned amount paid exactly; **a discounted session
+  and a premium-priced session both paying the trainer the same**; flat vs
+  hourly basis across 30/45/60/90-minute sessions; pro-rating rounding to whole
+  cents with payout + platform still reconciling to gross; an unset rate paying
+  nothing and being detectable; a payout above the charge flagged with the
+  platform share floored at zero; and negative rates, grosses and durations
+  clamped rather than inverting a transfer.
 
 ## Still to build
 
-- **Stripe Elements mount** — checkout still cannot take a card in the browser.
 - **Reminder emails** before a session; only the receipt exists.
 - **Trainer detail → book** deep link on the web trainer profile.
 - **Refunds and cancellation policy** — cancelling a booking does not yet refund

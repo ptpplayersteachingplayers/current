@@ -3,21 +3,24 @@
 An honest assessment of the four new plugins before you commit to them, written
 after building them and then trying to break them.
 
-**Verdict: the core is sound and the security properties hold under test. It is
-roughly 60% of a working platform, and the remaining 40% is known and listed.**
+**Verdict: the core is sound and the security properties hold under test. With
+the training side, signed quotes and the Elements mount added, it is roughly 80%
+of a working platform — and the remaining 20% is known and listed.**
 
 ---
 
 ## What was actually verified
 
-64 assertions across 5 suites, run with `php tests/run.php`. These are not
+115 assertions across 7 suites, run with `php tests/run.php`. These are not
 smoke tests — each one is written as the attack it defends against, using the
 exact shapes found in the audit of the old codebase.
 
 | Suite | Asserts | What it proves |
 |---|---|---|
-| `test-pricing` | 16 | A customer cannot influence what they are charged |
+| `test-payouts` | 28 | A trainer is paid the amount assigned, whatever the price |
 | `test-authorisation` | 21 | One account cannot act as another |
+| `test-slots` | 20 | Availability turns into the right bookable times |
+| `test-pricing` | 19 | A customer cannot influence what they are charged |
 | `test-stripe-webhook` | 13 | A forged payment notification cannot get through |
 | `test-discounts` | 11 | A code cannot be abused or exhausted |
 | `test-actor-cache` | 3 | Identity does not go stale mid-request |
@@ -42,6 +45,12 @@ and authorisation, neither of which needs a database.
   (fails closed).
 - Walking player ids to reach another family's child — **refused**.
 - A trainer acting on a parent-owned record — **refused**.
+- A total, discount or owner rewritten in the object cache — **refused**, the
+  signature no longer verifies.
+- Booking a time the trainer is closed, an off-boundary start, or a slot already
+  taken — **refused**.
+- A discounted or premium-priced session changing what a trainer earns — **it
+  does not**; pay is the assigned amount either way.
 
 ---
 
@@ -65,18 +74,12 @@ guest. Fixed by keying the cache on user id.
 
 ## Known weaknesses — read before deciding
 
-### A quote edited in the object cache is trusted on re-read
+### ~~A quote edited in the object cache is trusted on re-read~~ — closed
 
-Quotes are cached server-side as transients and re-read by id at payment. If
-your object cache (Redis, Memcached) is writable by an attacker, a total can be
-rewritten there. This is a real limitation, marked `NOTE:` in the test suite
-rather than hidden.
-
-It is a meaningfully smaller hole than the old design — it requires
-infrastructure access rather than a browser — but it is not nothing. If you want
-it closed, sign the quote with an HMAC over its contents and verify on re-read.
-That is about 20 lines. **My recommendation: do it before launch**, since it is
-cheap and this is the one place a total can still be altered.
+Quotes are now signed with an HMAC over their own contents, keyed on the
+install's `AUTH_SALT`, and verified on every re-read. A total, discount or owner
+rewritten in the object cache fails verification and fires `ptp_quote_tampered`
+rather than being charged. Covered by four assertions in `test-pricing`.
 
 ### `PTP_Actor` reaches into the global container
 
@@ -96,8 +99,10 @@ Stripe API.** Specifically unproven:
 - The autoloader resolving classes under a real plugin load order
 - The Stripe API calls, which have been written against the documented shapes
   but never sent
-- Whether the checkout JS correctly drives Stripe.js — **the Stripe Elements
-  mount is not written yet**, only the intent-creation handshake
+- Whether the checkout JS correctly drives Stripe.js. The Elements mount is now
+  written — it creates the intent, mounts the payment element, re-prices
+  immediately before confirming, and confirms with `redirect: 'if_required'` —
+  but it has never run against a real Stripe account.
 
 Before this is worth keeping, it needs one hour on a staging site: activate the
 four plugins, confirm the tables build, put a camp in the database, and take one
@@ -110,27 +115,28 @@ real test-mode payment end to end. If that works, the architecture is proven. If
 
 | | Files | Lines |
 |---|---|---|
-| Implemented | 54 | 4,880 |
-| Scaffolded (data wired, markup pending) | 12 | 243 |
+| Implemented | 65 | ~7,600 |
+| Scaffolded (data wired, markup pending) | 11 | ~220 |
 
-**Working:** core (schema, guard, actor, pricing, quote, discounts, Stripe,
-mail, 5 repositories), checkout page and its JS handshake, parent dashboard,
+**Working:** core (schema, guard, actor, pricing, signed quotes, discounts,
+Stripe, Connect payouts, slots, booking intent, mail, REST API, 6 repositories),
+checkout with the Elements mount, the booking page, parent and trainer portals,
 camps listing, thank-you, admin Today / Orders / Trainers / Settings, marketing
-landing + Facebook webhook + attribution, both stylesheets, the token file.
+landing + Facebook webhook + attribution, both stylesheets, the token file, and
+the mobile app's training client, hooks and booking screen.
 
 **Scaffolded** — the data layer is wired and the page renders, but the markup is
 a placeholder: camp detail, trainers, trainer detail, clinics, cart, login,
-register, trainer application, trainer dashboard; admin Schedule, Customers,
-Discounts.
+register, trainer application; admin Schedule, Customers, Discounts.
 
 **Not started at all:**
 
-- Stripe Elements mount in the browser (the checkout cannot yet take a card)
-- Trainer availability and the booking calendar — the single biggest gap
+- Trainer availability and the booking calendar — **now built**, see TRAINING.md
 - The data migration from the old tables
 - Camp/clinic admin editing beyond the WordPress post editor
 - Reminder emails (only the receipt exists)
-- Any front-end JS beyond checkout (the dashboard cancel button has no handler)
+- Refunds: cancelling a booking does not yet refund the parent or reverse a
+  pending payout row
 
 ---
 
@@ -156,13 +162,14 @@ assessment, and the rollback is deactivating three plugins.
 ## What I would want before calling this production-ready
 
 1. One end-to-end test-mode payment on staging — proves the whole chain.
-2. HMAC-sign the quote (~20 lines).
-3. Stripe Elements mount in `ptp-checkout.js`.
-4. Trainer availability and booking calendar.
-5. Port the 12 scaffolded templates.
+2. ~~HMAC-sign the quote~~ — done.
+3. ~~Stripe Elements mount~~ — done, untested against live Stripe.
+4. ~~Trainer availability and booking calendar~~ — done.
+5. Port the remaining scaffolded templates.
 6. Write and rehearse the data migration against a database copy.
 
-Items 1 and 2 are hours. Items 3–6 are the real remaining build.
+Item 1 is the one that matters now: everything else is verified logic waiting on
+a real environment to prove it.
 
 ---
 

@@ -235,7 +235,17 @@ final class PTP_Api
 
     public function trainer_earnings(): WP_REST_Response
     {
-        return $this->ok(ptp_core()->connect()->earnings_for($this->actor()));
+        $earnings = ptp_core()->connect()->earnings_for($this->actor());
+
+        return $this->ok([
+            'pendingCents'  => $earnings['pending_cents'],
+            'clearingCents' => $earnings['clearing_cents'],
+            'paidCents'     => $earnings['paid_cents'],
+            'connected'     => $earnings['connected'],
+            // What this trainer earns, as assigned by staff.
+            'rateCents'     => $earnings['rate_cents'],
+            'rateBasis'     => $earnings['rate_basis'],
+        ]);
     }
 
     public function trainer_availability(): WP_REST_Response

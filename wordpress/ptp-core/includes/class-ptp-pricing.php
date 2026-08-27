@@ -103,6 +103,17 @@ final class PTP_Pricing
             throw new PTP_Pricing_Exception(__('Your checkout session expired. Please review your cart and try again.', 'ptp'));
         }
 
+        /**
+         * The cached quote is signed over its own contents. A total rewritten
+         * in the object cache — by a shared Redis, another plugin, or a stray
+         * script — fails this check rather than being charged.
+         */
+        if (!PTP_Quote::verify($raw)) {
+            do_action('ptp_quote_tampered', $quote_id, $actor->user_id());
+
+            throw new PTP_Pricing_Exception(__('Your checkout session could not be verified. Please review your cart and try again.', 'ptp'));
+        }
+
         $quote = PTP_Quote::from_array($raw);
 
         if ($quote->user_id() !== $actor->user_id()) {

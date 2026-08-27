@@ -8,21 +8,33 @@
  * A training session involves three parties and one charge:
  *
  *   parent pays  ──►  PTP platform account  ──►  trainer connected account
- *                     (keeps platform fee)       (receives net, on completion)
+ *                     (keeps the remainder)      (receives their set amount)
  *
- * The charge is taken on the PTP account, not the trainer's. That is deliberate:
+ * Trainers are paid a FIXED AMOUNT set per trainer — not a percentage of what
+ * the parent paid. Staff assign each trainer's rate on the Trainers screen.
+ *
+ *   parent price   trainers.hourly_cents  (what the customer is charged)
+ *   trainer pay    trainers.payout_cents  (what this trainer earns)
+ *   platform keeps the difference
+ *
+ * The two are independent on purpose. Raising a trainer's rate does not raise
+ * what parents pay, and a promotional price does not silently cut the
+ * trainer's pay. Either can change without touching the other.
+ *
+ * payout_basis decides how payout_cents is read:
+ *   'session'  a flat amount for the session, whatever its length (default)
+ *   'hour'     a rate, pro-rated to the session length
+ *
+ * The charge is taken on the PTP account, not the trainer's:
  *
  *   - PTP owns the customer relationship and the refund decision.
- *   - Money is held until the session is delivered, so a no-show or a
- *     cancellation is a refund rather than a clawback from a trainer who has
- *     already been paid.
- *   - One Stripe account reconciles all revenue — camps, clinics and training
- *     together — which the old split across separate integrations never did.
+ *   - Money is held until the session is delivered, so a no-show is a refund
+ *     rather than a clawback from a trainer already paid.
+ *   - One Stripe account reconciles camps, clinics and training together.
  *
- * Payouts are therefore *transfers*, made after `ptp_booking_completed`, not
+ * Payouts are therefore *transfers* made after `ptp_booking_completed`, not
  * `ptp_order_paid`. The ledger row is written at payment time so a trainer can
- * see what they have earned and when it clears, but the transfer only moves
- * once the work is done.
+ * see what they have earned, but money only moves once the work is done.
  *
  * Trainer onboarding uses Stripe's hosted flow. PTP never sees or stores a
  * trainer's bank details — only the `acct_…` id.
@@ -35,57 +47,77 @@ if (!defined('ABSPATH')) {
 
 final class PTP_Connect
 {
-    /** Platform's share of a training session, in basis points (2500 = 25%). */
-    private const DEFAULT_FEE_BPS = 2500;
-
     /** Funds clear this long after a session, leaving room for disputes. */
     private const CLEARANCE_DAYS = 7;
 
+    public const BASIS_SESSION = 'session';
+    public const BASIS_HOUR    = 'hour';
+
     public function register_hooks(): void
     {
-        // Priority 20: after PTP_Bookings_Repository has realised the booking
-        // at priority 10, so the rows this reads already exist.
+        // Priority 20: after PTP_Booking_Fulfilment has written the booking
+        // rows at priority 10, so the rows this reads already exist.
         add_action('ptp_order_paid', [$this, 'record_trainer_earnings'], 20, 1);
         add_action('ptp_booking_completed', [$this, 'release_payout'], 10, 1);
     }
 
     /**
-     * The platform's cut, as a proportion in basis points.
+     * What a trainer earns for one session.
      *
-     * Filterable so a trainer-specific or promotional rate can be applied
-     * without touching this class.
-     */
-    public function fee_bps(int $trainer_id): int
-    {
-        $bps = (int) apply_filters(
-            'ptp_platform_fee_bps',
-            (int) get_option('ptp_platform_fee_bps', self::DEFAULT_FEE_BPS),
-            $trainer_id
-        );
-
-        // A fee outside 0-100% is a configuration error, not a business rule.
-        return max(0, min(10000, $bps));
-    }
-
-    /**
-     * Split a gross amount into platform fee and trainer net.
+     * Read from the trainer's own configured amount. Nothing here consults what
+     * the parent paid, so a discount, a promotion or a price change never
+     * silently alters trainer pay.
      *
-     * @return array{gross_cents: int, fee_cents: int, net_cents: int}
+     * @return array{gross_cents: int, payout_cents: int, platform_cents: int, shortfall: bool}
      */
-    public function split(int $gross_cents, int $trainer_id): array
+    public function split(int $gross_cents, int $trainer_id, int $minutes = 60): array
     {
-        $gross = max(0, $gross_cents);
-        $fee   = (int) round($gross * $this->fee_bps($trainer_id) / 10000);
+        $gross  = max(0, $gross_cents);
+        $payout = $this->payout_for($trainer_id, $minutes);
+
+        /**
+         * A payout larger than the charge means the platform loses money on the
+         * session — always a configuration mistake (a rate set too high, or a
+         * session sold at a discount below cost). The trainer is still paid
+         * what they were promised; the shortfall is flagged for staff instead
+         * of being silently absorbed or silently docked from the trainer.
+         */
+        $shortfall = $payout > $gross;
 
         return [
-            'gross_cents' => $gross,
-            'fee_cents'   => $fee,
-            'net_cents'   => $gross - $fee,
+            'gross_cents'    => $gross,
+            'payout_cents'   => $payout,
+            'platform_cents' => max(0, $gross - $payout),
+            'shortfall'      => $shortfall,
         ];
     }
 
     /**
-     * Write ledger rows for every training line on a paid order.
+     * This trainer's payout for a session of the given length.
+     *
+     * Filterable so a one-off arrangement can be honoured without editing the
+     * stored rate, but the default is simply what staff assigned.
+     */
+    public function payout_for(int $trainer_id, int $minutes = 60): int
+    {
+        $trainer = $this->trainer_row($trainer_id);
+
+        if ($trainer === null) {
+            return 0;
+        }
+
+        $amount = max(0, (int) $trainer->payout_cents);
+        $basis  = (string) $trainer->payout_basis;
+
+        if ($basis === self::BASIS_HOUR) {
+            $amount = (int) round($amount * max(0, $minutes) / 60);
+        }
+
+        return max(0, (int) apply_filters('ptp_trainer_payout_cents', $amount, $trainer_id, $minutes));
+    }
+
+    /**
+     * Write ledger rows for every training booking on a paid order.
      *
      * Runs on ptp_order_paid so the trainer sees pending earnings immediately,
      * but the row is 'pending' — no money moves until the session happens.
@@ -103,25 +135,44 @@ final class PTP_Connect
         ) ?: [];
 
         foreach ($bookings as $booking) {
-            $gross = $this->gross_for_booking($order_id, (int) $booking->id);
+            $trainer_id = (int) $booking->trainer_id;
+            $minutes    = $this->minutes_of($booking);
+            $gross      = $this->gross_for_order($order_id);
+            $split      = $this->split($gross, $trainer_id, $minutes);
 
-            if ($gross <= 0) {
+            if ($split['payout_cents'] <= 0) {
+                /**
+                 * No rate assigned yet. Staff need to set one before this
+                 * trainer can be paid — surfaced rather than silently skipped,
+                 * because the session still happened and is still owed.
+                 */
+                do_action('ptp_trainer_payout_unset', $trainer_id, (int) $booking->id);
+
                 continue;
             }
 
-            $split = $this->split($gross, (int) $booking->trainer_id);
+            if ($split['shortfall']) {
+                do_action(
+                    'ptp_payout_exceeds_charge',
+                    $trainer_id,
+                    (int) $booking->id,
+                    $split['payout_cents'],
+                    $split['gross_cents']
+                );
+            }
 
             // Unique index on booking_id makes a repeated webhook harmless.
             $wpdb->query(
                 $wpdb->prepare(
                     'INSERT IGNORE INTO ' . PTP_Schema::table('payouts')
-                    . ' (trainer_id, booking_id, gross_cents, platform_fee_cents, net_cents, status, available_at, created_at)'
-                    . ' VALUES (%d, %d, %d, %d, %d, %s, %s, %s)',
-                    (int) $booking->trainer_id,
+                    . ' (trainer_id, booking_id, gross_cents, platform_fee_cents, net_cents, minutes, status, available_at, created_at)'
+                    . ' VALUES (%d, %d, %d, %d, %d, %d, %s, %s, %s)',
+                    $trainer_id,
                     (int) $booking->id,
                     $split['gross_cents'],
-                    $split['fee_cents'],
-                    $split['net_cents'],
+                    $split['platform_cents'],
+                    $split['payout_cents'],
+                    $minutes,
                     'pending',
                     $this->clearance_date((string) $booking->starts_at),
                     current_time('mysql', true)
@@ -133,9 +184,9 @@ final class PTP_Connect
     /**
      * Move money to the trainer once a session is delivered.
      *
-     * Skips silently when the trainer has not finished Stripe onboarding — the
-     * ledger row stays pending and shows on their dashboard as "connect your
-     * account to get paid", which is more useful than a failed transfer.
+     * Skips when the trainer has not finished Stripe onboarding — the ledger
+     * row stays pending and their dashboard says "connect your account to get
+     * paid", which is more useful than a failed transfer.
      */
     public function release_payout(int $booking_id): void
     {
@@ -223,13 +274,20 @@ final class PTP_Connect
     /**
      * Earnings summary for a trainer's dashboard.
      *
-     * @return array{pending_cents: int, clearing_cents: int, paid_cents: int, connected: bool}
+     * @return array{pending_cents: int, clearing_cents: int, paid_cents: int, connected: bool, rate_cents: int, rate_basis: string}
      */
     public function earnings_for(PTP_Actor $actor): array
     {
         global $wpdb;
 
-        $empty = ['pending_cents' => 0, 'clearing_cents' => 0, 'paid_cents' => 0, 'connected' => false];
+        $empty = [
+            'pending_cents'  => 0,
+            'clearing_cents' => 0,
+            'paid_cents'     => 0,
+            'connected'      => false,
+            'rate_cents'     => 0,
+            'rate_basis'     => self::BASIS_SESSION,
+        ];
 
         if (!$actor->is(PTP_Guard::ROLE_TRAINER) || $actor->id() === null) {
             return $empty;
@@ -238,6 +296,7 @@ final class PTP_Connect
         $trainer_id = (int) $actor->id();
         $table      = PTP_Schema::table('payouts');
         $now        = current_time('mysql', true);
+        $trainer    = $this->trainer_row($trainer_id);
 
         $sum = static function (string $sql, ...$args) use ($wpdb): int {
             return (int) $wpdb->get_var($wpdb->prepare($sql, ...$args));
@@ -259,13 +318,40 @@ final class PTP_Connect
                 $trainer_id, 'paid'
             ),
             'connected'      => $this->account_id($trainer_id) !== '',
+            'rate_cents'     => $trainer ? (int) $trainer->payout_cents : 0,
+            'rate_basis'     => $trainer ? (string) $trainer->payout_basis : self::BASIS_SESSION,
         ];
+    }
+
+    /**
+     * Set a trainer's payout rate. Staff action — the caller is responsible for
+     * the capability check; the repository guards the values.
+     */
+    public function set_payout_rate(int $trainer_id, int $payout_cents, string $basis = self::BASIS_SESSION): void
+    {
+        global $wpdb;
+
+        if (!in_array($basis, [self::BASIS_SESSION, self::BASIS_HOUR], true)) {
+            throw new PTP_Repository_Exception(__('Unknown payout basis.', 'ptp'));
+        }
+
+        $wpdb->update(
+            PTP_Schema::table('trainers'),
+            [
+                'payout_cents' => max(0, $payout_cents),
+                'payout_basis' => $basis,
+                'updated_at'   => current_time('mysql', true),
+            ],
+            ['id' => $trainer_id],
+            ['%d', '%s', '%s'],
+            ['%d']
+        );
     }
 
     // -- internals ------------------------------------------------------------
 
-    /** What the parent actually paid for this booking's line. */
-    private function gross_for_booking(int $order_id, int $booking_id): int
+    /** What the parent paid for the training lines on this order. */
+    private function gross_for_order(int $order_id): int
     {
         global $wpdb;
 
@@ -277,6 +363,39 @@ final class PTP_Connect
                 'training'
             )
         );
+    }
+
+    /** Session length from the booking's own start and end. */
+    private function minutes_of(object $booking): int
+    {
+        if (empty($booking->ends_at)) {
+            return 60;
+        }
+
+        try {
+            $start = new DateTimeImmutable((string) $booking->starts_at);
+            $end   = new DateTimeImmutable((string) $booking->ends_at);
+        } catch (Exception $e) {
+            return 60;
+        }
+
+        $minutes = (int) round(($end->getTimestamp() - $start->getTimestamp()) / 60);
+
+        return $minutes > 0 ? $minutes : 60;
+    }
+
+    private function trainer_row(int $trainer_id): ?object
+    {
+        global $wpdb;
+
+        $row = $wpdb->get_row(
+            $wpdb->prepare(
+                'SELECT id, payout_cents, payout_basis, stripe_account_id FROM ' . PTP_Schema::table('trainers') . ' WHERE id = %d',
+                $trainer_id
+            )
+        );
+
+        return $row ?: null;
     }
 
     private function clearance_date(string $session_start): string
@@ -292,14 +411,9 @@ final class PTP_Connect
 
     private function account_id(int $trainer_id): string
     {
-        global $wpdb;
+        $trainer = $this->trainer_row($trainer_id);
 
-        return (string) $wpdb->get_var(
-            $wpdb->prepare(
-                'SELECT stripe_account_id FROM ' . PTP_Schema::table('trainers') . ' WHERE id = %d',
-                $trainer_id
-            )
-        );
+        return $trainer ? (string) $trainer->stripe_account_id : '';
     }
 
     private function store_account_id(int $trainer_id, string $account_id): void

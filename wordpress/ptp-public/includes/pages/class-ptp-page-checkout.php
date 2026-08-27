@@ -42,6 +42,13 @@ final class PTP_Page_Checkout extends PTP_Page
     {
         parent::enqueue();
 
+        /**
+         * Stripe.js must come from Stripe's own domain — self-hosting it
+         * breaks PCI SAQ-A eligibility and Stripe's fraud signals. It is
+         * declared as a dependency so it is always present before our script
+         * runs.
+         */
+        wp_enqueue_script('stripe-js', 'https://js.stripe.com/v3/', [], null, true);
         wp_enqueue_script('ptp-checkout');
         wp_localize_script('ptp-checkout', 'PTPCheckout', [
             'ajaxUrl'        => admin_url('admin-ajax.php'),
@@ -50,6 +57,11 @@ final class PTP_Page_Checkout extends PTP_Page
             'quoteNonce'     => $this->nonce(self::AJAX_QUOTE),
             'intentNonce'    => $this->nonce(self::AJAX_INTENT),
             'publishableKey' => ptp_core()->stripe()->publishable_key(),
+            'strings'        => [
+                'processing' => __('Processing…', 'ptp'),
+                'pay'        => __('Pay now', 'ptp'),
+                'generic'    => __('We could not take that payment. Please check your details and try again.', 'ptp'),
+            ],
         ]);
     }
 
@@ -108,12 +120,15 @@ final class PTP_Page_Checkout extends PTP_Page
             if ($intent_id !== '') {
                 ptp_core()->stripe()->update_intent_for_quote($intent_id, $quote, $actor);
 
-                wp_send_json_success(['id' => $intent_id, 'amount' => $quote->total_cents()]);
+                wp_send_json_success([
+                    'id'     => $intent_id,
+                    'amount' => $quote->total_cents(),
+                ]);
             }
 
             // The order is written before payment so the webhook has something
             // to reconcile against when Stripe calls back.
-            ptp_core()->orders()->create_from_quote($quote, $actor);
+            $order_id = ptp_core()->orders()->create_from_quote($quote, $actor);
 
             $intent = ptp_core()->stripe()->create_intent($quote, $actor);
         } catch (PTP_Pricing_Exception | PTP_Stripe_Exception | PTP_Repository_Exception $e) {
@@ -121,9 +136,16 @@ final class PTP_Page_Checkout extends PTP_Page
         }
 
         wp_send_json_success([
-            'id'            => $intent['id'],
-            'clientSecret'  => $intent['client_secret'],
-            'amount'        => $quote->total_cents(),
+            'id'           => $intent['id'],
+            'clientSecret' => $intent['client_secret'],
+            'amount'       => $quote->total_cents(),
+            /**
+             * Where Stripe returns the customer after any redirect-based
+             * method. Built server-side from the order we just wrote, so the
+             * browser cannot point the confirmation at someone else's order —
+             * and the thank-you page scopes the lookup to the actor anyway.
+             */
+            'returnUrl'    => PTP_Public_Links::thank_you($order_id),
         ]);
     }
 

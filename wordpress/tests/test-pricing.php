@@ -74,13 +74,44 @@ T::throws(fn() => $pricing->retrieve_quote('not-a-real-quote', $actor),
     PTP_Pricing_Exception::class, 'a forged quote id is refused');
 
 // ---- ATTACK: edit the cached quote then redeem ------------------------------
-// Simulates an attacker with object-cache write access; the quote is still a
-// server-side record, so this is about blast radius, not a request-path hole.
+// Simulates something with object-cache write access — a shared or compromised
+// Redis, another plugin, a stray CLI script. The quote is signed over its own
+// contents, so a rewritten total no longer verifies.
 $tampered = $q->to_array();
 $tampered['total_cents'] = 1;
 $GLOBALS['__transients']['ptp_quote_' . $q->id()] = $tampered;
-$reread = $pricing->retrieve_quote($q->id(), $actor);
-T::eq($reread->total_cents(), 1, 'NOTE: a quote edited in the cache is trusted on re-read');
+T::throws(
+    fn() => $pricing->retrieve_quote($q->id(), $actor),
+    PTP_Pricing_Exception::class,
+    'a total rewritten in the object cache fails signature verification'
+);
+
+// Same for the discount and the owning user.
+$tampered = $q->to_array();
+$tampered['discount']['amount_cents'] = 99999;
+$GLOBALS['__transients']['ptp_quote_' . $q->id()] = $tampered;
+T::throws(
+    fn() => $pricing->retrieve_quote($q->id(), $actor),
+    PTP_Pricing_Exception::class,
+    'a discount rewritten in the cache fails verification'
+);
+
+$tampered = $q->to_array();
+unset($tampered['signature']);
+$GLOBALS['__transients']['ptp_quote_' . $q->id()] = $tampered;
+T::throws(
+    fn() => $pricing->retrieve_quote($q->id(), $actor),
+    PTP_Pricing_Exception::class,
+    'a quote with its signature stripped is refused, not trusted'
+);
+
+// An untouched quote still verifies and round-trips.
+$GLOBALS['__transients']['ptp_quote_' . $q->id()] = $q->to_array();
+T::eq(
+    $pricing->retrieve_quote($q->id(), $actor)->total_cents(),
+    52500,
+    'an untampered quote still verifies and returns its real total'
+);
 
 // ---- quote expiry -----------------------------------------------------------
 $expired = $q->to_array();

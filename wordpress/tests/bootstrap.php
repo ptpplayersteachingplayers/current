@@ -52,6 +52,8 @@ function do_action($tag, ...$args) { foreach ($GLOBALS['__actions'][$tag] ?? [] 
 function add_action($tag, $cb, $prio = 10, $args = 1) { $GLOBALS['__actions'][$tag][] = $cb; }
 function user_can($u, $c) { return $GLOBALS['__caps'][$u][$c] ?? false; }
 function get_current_user_id() { return $GLOBALS['__current_user'] ?? 0; }
+function wp_json_encode($d) { return json_encode($d); }
+if (!defined('AUTH_SALT')) { define('AUTH_SALT', 'test-salt-not-a-real-secret'); }
 function trailingslashit($s) { return rtrim($s, '/\\') . '/'; }
 
 // ---- $wpdb stub --------------------------------------------------------------
@@ -97,7 +99,11 @@ class WPDB_Stub {
     public function query($sql) { $this->queries[] = $sql; return 1; }
     public function insert($t, $d, $f = null) { $this->rows[$t][] = (object) $d; $this->insert_id = count($this->rows[$t] ?? []); return 1; }
     public function update($t, $d, $w, $df = null, $wf = null) { $this->queries[] = "UPDATE $t"; return 1; }
-    private function lookup($sql) { return $GLOBALS['__next_row'] ?? null; }
+    /** wpdb returns objects, so arrays seeded by tests are cast to match. */
+    private function lookup($sql) {
+        $row = $GLOBALS['__next_row'] ?? null;
+        return is_array($row) ? (object) $row : $row;
+    }
 }
 $GLOBALS['wpdb'] = new WPDB_Stub();
 

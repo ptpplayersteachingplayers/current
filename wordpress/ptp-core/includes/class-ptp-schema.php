@@ -26,7 +26,7 @@ if (!defined('ABSPATH')) {
 final class PTP_Schema
 {
     /** Bump to trigger dbDelta on the next request after deploy. */
-    public const VERSION = '1.1.0';
+    public const VERSION = '1.2.0';
 
     private const OPTION_VERSION = 'ptp_schema_version';
 
@@ -145,6 +145,18 @@ final class PTP_Schema
                 display_name VARCHAR(150) NOT NULL DEFAULT '',
                 bio LONGTEXT,
                 hourly_cents INT UNSIGNED NOT NULL DEFAULT 0,
+                /**
+                 * What THIS trainer is paid, set per trainer by staff — not a
+                 * percentage of what the parent paid. hourly_cents is what the
+                 * customer is charged; payout_cents is what the trainer earns.
+                 * The platform keeps the difference.
+                 *
+                 * payout_basis decides how payout_cents is read:
+                 *   'session' — a flat amount for the session, whatever its length
+                 *   'hour'    — a rate, pro-rated to the session length
+                 */
+                payout_cents INT UNSIGNED NOT NULL DEFAULT 0,
+                payout_basis VARCHAR(10) NOT NULL DEFAULT 'session',
                 status VARCHAR(20) NOT NULL DEFAULT 'pending',
                 stripe_account_id VARCHAR(64) NOT NULL DEFAULT '',
                 created_at DATETIME NOT NULL,
@@ -308,6 +320,7 @@ final class PTP_Schema
                 gross_cents INT UNSIGNED NOT NULL DEFAULT 0,
                 platform_fee_cents INT UNSIGNED NOT NULL DEFAULT 0,
                 net_cents INT UNSIGNED NOT NULL DEFAULT 0,
+                minutes SMALLINT UNSIGNED NOT NULL DEFAULT 0,
                 status VARCHAR(20) NOT NULL DEFAULT 'pending',
                 stripe_transfer_id VARCHAR(64) NOT NULL DEFAULT '',
                 available_at DATETIME DEFAULT NULL,

@@ -5,9 +5,13 @@
  * every figure displayed comes back from the server's quote response, and the
  * amount charged is read server-side from the cached quote.
  *
- * Deliberately dependency-free and un-bundled. The previous checkout shipped
- * several competing scripts that each recalculated totals in the browser, which
- * is how a client-side "total" ended up being trusted by the server.
+ * Card details never touch this code or this server. Stripe Elements renders
+ * the card fields in an iframe served from Stripe's domain, so the page only
+ * ever holds a client secret — which is why the site stays in PCI SAQ-A scope.
+ *
+ * Deliberately dependency-free apart from Stripe.js. The previous checkout
+ * shipped several competing scripts that each recalculated totals in the
+ * browser, which is how a client-side "total" ended up being trusted.
  * -----------------------------------------------------------------------------
  */
 (function () {
@@ -19,8 +23,15 @@
     var state = {
         quoteId: null,
         intentId: null,
+        clientSecret: null,
+        returnUrl: null,
+        stripe: null,
+        elements: null,
+        mounted: false,
         busy: false
     };
+
+    // -- cart ------------------------------------------------------------------
 
     /** Read the cart, discarding anything that is not an item reference. */
     function readCart() {
@@ -33,9 +44,7 @@
             }
 
             return parsed
-                .filter(function (item) {
-                    return item && item.type && item.id;
-                })
+                .filter(function (item) { return item && item.type && item.id; })
                 .map(function (item) {
                     return {
                         type: String(item.type),
@@ -49,6 +58,16 @@
         }
     }
 
+    function clearCart() {
+        try {
+            window.localStorage.removeItem(CART_KEY);
+        } catch (e) {
+            /* nothing to do */
+        }
+    }
+
+    // -- transport -------------------------------------------------------------
+
     function post(action, nonce, fields) {
         var body = new window.FormData();
         body.append('action', action);
@@ -60,20 +79,18 @@
 
         return window
             .fetch(config.ajaxUrl, { method: 'POST', body: body, credentials: 'same-origin' })
-            .then(function (response) {
-                return response.json();
-            })
+            .then(function (response) { return response.json(); })
             .then(function (payload) {
                 if (!payload || !payload.success) {
-                    var message = payload && payload.data && payload.data.message
-                        ? payload.data.message
-                        : 'Something went wrong. Please try again.';
-                    throw new Error(message);
+                    throw new Error(
+                        (payload && payload.data && payload.data.message) || config.strings.generic
+                    );
                 }
-
                 return payload.data;
             });
     }
+
+    // -- summary ---------------------------------------------------------------
 
     /** Ask the server to price the cart, then render exactly what it returns. */
     function refreshQuote() {
@@ -130,15 +147,15 @@
         return row;
     }
 
+    // -- payment ---------------------------------------------------------------
+
     function showError(message) {
         var box = document.getElementById('ptp-payment-error');
 
-        if (!box) {
-            return;
-        }
+        if (!box) { return; }
 
-        box.textContent = message;
-        box.hidden = false;
+        box.textContent = message || '';
+        box.hidden = !message;
     }
 
     function setBusy(busy) {
@@ -148,70 +165,128 @@
         if (button) {
             button.disabled = busy;
             button.setAttribute('aria-disabled', busy ? 'true' : 'false');
+            button.textContent = busy ? config.strings.processing : config.strings.pay;
         }
     }
 
     /**
-     * Start payment.
+     * Create the intent and mount Stripe's payment form.
      *
-     * Sends the quote id only. The server re-reads the quote and charges its
-     * total — the browser has no way to express an amount.
+     * We send the quote id; the server re-reads the quote and creates the
+     * intent for its total. There is no amount in this request.
      */
-    function startPayment() {
-        if (state.busy) {
-            return;
+    function mountPaymentElement() {
+        if (state.mounted || !state.quoteId) {
+            return Promise.resolve();
         }
 
-        setBusy(true);
+        return post(config.intentAction, config.intentNonce, {
+            quote_id: state.quoteId,
+            intent_id: ''
+        }).then(function (intent) {
+            state.intentId = intent.id;
+            state.clientSecret = intent.clientSecret;
+            state.returnUrl = intent.returnUrl;
 
+            state.stripe = window.Stripe(config.publishableKey);
+            state.elements = state.stripe.elements({
+                clientSecret: intent.clientSecret,
+                appearance: appearance()
+            });
+
+            state.elements.create('payment', { layout: 'tabs' }).mount('#ptp-payment-element');
+            state.mounted = true;
+        });
+    }
+
+    /**
+     * Match Elements to the site's design tokens, read from the live stylesheet
+     * so the card form follows a brand change without being updated separately.
+     */
+    function appearance() {
+        var css = window.getComputedStyle(document.documentElement);
+        var token = function (name, fallback) {
+            return (css.getPropertyValue(name) || '').trim() || fallback;
+        };
+
+        return {
+            theme: 'stripe',
+            variables: {
+                colorPrimary: token('--ptp-gold', '#FCB900'),
+                colorText: token('--ptp-ink', '#0E0F11'),
+                colorDanger: token('--ptp-danger', '#EF4444'),
+                borderRadius: token('--ptp-radius-sm', '8px'),
+                fontFamily: token('--ptp-font-body', 'system-ui, sans-serif')
+            }
+        };
+    }
+
+    /**
+     * Confirm the payment.
+     *
+     * Stripe either redirects to returnUrl (for methods that need it) or
+     * resolves here. Either way the order is only marked paid by the webhook,
+     * so a customer who closes the tab mid-redirect still gets their booking.
+     */
+    function pay() {
+        if (state.busy || !state.mounted) { return; }
+
+        setBusy(true);
+        showError('');
+
+        // Re-price immediately before charging, so a cart edited in another tab
+        // cannot be paid at a stale total.
         refreshQuote()
             .then(function () {
                 return post(config.intentAction, config.intentNonce, {
                     quote_id: state.quoteId,
-                    intent_id: state.intentId || ''
+                    intent_id: state.intentId
                 });
             })
-            .then(function (intent) {
-                state.intentId = intent.id;
+            .then(function () {
+                return state.stripe.confirmPayment({
+                    elements: state.elements,
+                    confirmParams: { return_url: state.returnUrl },
+                    redirect: 'if_required'
+                });
+            })
+            .then(function (result) {
+                if (result.error) {
+                    throw new Error(result.error.message || config.strings.generic);
+                }
 
-                // Hand off to Stripe.js, which confirms against clientSecret.
-                document.dispatchEvent(
-                    new window.CustomEvent('ptp:intent-ready', { detail: intent })
-                );
+                clearCart();
+                window.location.href = state.returnUrl;
             })
             .catch(function (error) {
                 showError(error.message);
-            })
-            .then(function () {
                 setBusy(false);
             });
     }
+
+    // -- boot ------------------------------------------------------------------
 
     function init() {
         var button = document.getElementById('ptp-pay-button');
         var discount = document.getElementById('ptp-discount');
 
-        if (!button) {
-            return;
-        }
+        if (!button) { return; }
 
-        button.addEventListener('click', startPayment);
+        button.addEventListener('click', pay);
 
         if (discount) {
             var timer = null;
             discount.addEventListener('input', function () {
                 window.clearTimeout(timer);
                 timer = window.setTimeout(function () {
-                    refreshQuote().catch(function (error) {
-                        showError(error.message);
-                    });
+                    refreshQuote().catch(function (error) { showError(error.message); });
                 }, 400);
             });
         }
 
-        refreshQuote().catch(function (error) {
-            showError(error.message);
-        });
+        refreshQuote()
+            .then(mountPaymentElement)
+            .catch(function (error) { showError(error.message); });
     }
 
     if (document.readyState === 'loading') {

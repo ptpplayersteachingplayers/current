@@ -1,0 +1,43 @@
+/**
+ * Landing page styles. Depends on ptp-tokens.css.
+ * One funnel layout; variants change colour treatment only.
+ */
+
+.ptp-landing {
+    padding: var(--ptp-space-8) 0;
+    background: var(--ptp-surface-sunken);
+    text-align: center;
+}
+
+.ptp-landing__headline {
+    margin-bottom: var(--ptp-space-4);
+}
+
+.ptp-landing__subhead {
+    font-size: var(--ptp-text-lg);
+    color: var(--ptp-text-muted);
+    margin-bottom: var(--ptp-space-6);
+}
+
+/* Cold traffic: high contrast, brand-forward — the visitor does not know PTP. */
+.ptp-landing--cold {
+    background: var(--ptp-black);
+    color: var(--ptp-text-inverse);
+}
+
+.ptp-landing--cold .ptp-landing__headline {
+    color: var(--ptp-gold);
+}
+
+.ptp-landing--cold .ptp-landing__subhead {
+    color: var(--ptp-gray-200);
+}
+
+/* Warm traffic: they know us; stay light and get out of the way. */
+.ptp-landing--warm {
+    background: var(--ptp-surface);
+}
+
+.ptp-landing--squad {
+    background: var(--ptp-gold-soft);
+}

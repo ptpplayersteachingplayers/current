@@ -1,0 +1,114 @@
+/**
+ * PTP back-office styles.
+ * -----------------------------------------------------------------------------
+ * Scoped to .ptp-admin and loaded only on PTP screens. Deliberately restrained:
+ * it leans on WordPress's own list tables and form-table conventions rather than
+ * rebuilding them, so screens stay familiar and the file stays small.
+ *
+ * Depends on ptp-tokens.css.
+ * -----------------------------------------------------------------------------
+ */
+
+.ptp-admin {
+    --ptp-admin-gap: var(--ptp-space-4);
+}
+
+.ptp-admin__title {
+    font-family: var(--ptp-font-display);
+    text-transform: uppercase;
+    letter-spacing: var(--ptp-tracking-caps);
+}
+
+/* ================================================================ Stats === */
+
+.ptp-admin__stats {
+    display: grid;
+    gap: var(--ptp-admin-gap);
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    margin: var(--ptp-space-5) 0;
+}
+
+.ptp-admin__stat {
+    background: var(--ptp-white);
+    border: 1px solid var(--ptp-border);
+    border-left: 4px solid var(--ptp-gold);
+    border-radius: var(--ptp-radius);
+    padding: var(--ptp-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ptp-space-1);
+}
+
+.ptp-admin__stat--warn {
+    border-left-color: var(--ptp-danger);
+}
+
+.ptp-admin__stat-value {
+    font-family: var(--ptp-font-display);
+    font-size: var(--ptp-text-2xl);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--ptp-text);
+}
+
+.ptp-admin__stat-label {
+    font-size: var(--ptp-text-sm);
+    color: var(--ptp-text-muted);
+}
+
+/* ================================================================ Pills === */
+
+.ptp-admin__pill {
+    display: inline-block;
+    padding: 2px var(--ptp-space-2);
+    border-radius: var(--ptp-radius-full);
+    background: var(--ptp-gray-100);
+    color: var(--ptp-gray-700);
+    font-size: var(--ptp-text-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--ptp-tracking-caps);
+}
+
+/* ================================================================ Empty === */
+
+.ptp-admin__empty {
+    padding: var(--ptp-space-6);
+    text-align: center;
+    color: var(--ptp-text-muted);
+    background: var(--ptp-gray-50);
+    border: 1px dashed var(--ptp-border-strong);
+    border-radius: var(--ptp-radius);
+}
+
+/* Wide tables scroll in their own container rather than the admin body. */
+.ptp-admin .wp-list-table {
+    display: block;
+    overflow-x: auto;
+}
+
+@media (min-width: 783px) {
+    .ptp-admin .wp-list-table {
+        display: table;
+        overflow-x: visible;
+    }
+}
+
+/**
+ * Admin follows the WordPress colour scheme, which does respond to the user's
+ * dark-mode preference in recent versions. Only surfaces we introduce are
+ * restated here; core list tables handle themselves.
+ */
+@media (prefers-color-scheme: dark) {
+    .ptp-admin__stat {
+        background: var(--ptp-gray-900);
+        border-color: var(--ptp-gray-700);
+    }
+
+    .ptp-admin__stat-value {
+        color: var(--ptp-white);
+    }
+
+    .ptp-admin__empty {
+        background: transparent;
+    }
+}

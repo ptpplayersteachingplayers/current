@@ -1,0 +1,111 @@
+/**
+ * PTP design tokens — the single source of brand truth.
+ * -----------------------------------------------------------------------------
+ * The previous CSS defined the same brand values under four competing prefixes
+ * (--ptp-, --tp-, --mc-, and bare --gold/--black) across 30,080 lines, so a
+ * brand change meant hunting hex codes through a dozen files. Every PTP
+ * stylesheet now loads this file as a dependency and uses these names only.
+ *
+ * Raw hex codes below this file are a bug. Add a token instead.
+ * -----------------------------------------------------------------------------
+ */
+
+:root {
+    /* ---- Brand ---------------------------------------------------------- */
+    --ptp-gold: #FCB900;
+    --ptp-gold-hover: #E5A800;
+    --ptp-gold-soft: #FEF3C7;
+    --ptp-black: #0A0A0A;
+    --ptp-ink: #0E0F11;
+
+    /* ---- Neutrals ------------------------------------------------------- */
+    --ptp-white: #FFFFFF;
+    --ptp-bone: #F4F3F0;
+    --ptp-gray-50: #FAFAFA;
+    --ptp-gray-100: #F3F4F6;
+    --ptp-gray-200: #E5E7EB;
+    --ptp-gray-400: #9CA3AF;
+    --ptp-gray-500: #6B7280;
+    --ptp-gray-700: #374151;
+    --ptp-gray-900: #1A1A1A;
+
+    /* ---- Status --------------------------------------------------------- */
+    --ptp-success: #22C55E;
+    --ptp-danger: #EF4444;
+    --ptp-warning: #F59E0B;
+    --ptp-info: #3B82F6;
+
+    /* ---- Semantic surfaces ---------------------------------------------- */
+    --ptp-surface: var(--ptp-white);
+    --ptp-surface-sunken: var(--ptp-bone);
+    --ptp-surface-inverse: var(--ptp-black);
+    --ptp-text: var(--ptp-ink);
+    --ptp-text-muted: var(--ptp-gray-500);
+    --ptp-text-inverse: var(--ptp-white);
+    --ptp-border: var(--ptp-gray-200);
+    --ptp-border-strong: var(--ptp-gray-400);
+
+    /* ---- Type ----------------------------------------------------------- */
+    --ptp-font-display: 'Oswald', 'Helvetica Neue', Arial, sans-serif;
+    --ptp-font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+    --ptp-text-xs: 0.75rem;
+    --ptp-text-sm: 0.875rem;
+    --ptp-text-base: 1rem;
+    --ptp-text-lg: 1.125rem;
+    --ptp-text-xl: 1.375rem;
+    --ptp-text-2xl: 1.75rem;
+    --ptp-text-3xl: 2.25rem;
+    --ptp-text-4xl: 3rem;
+
+    --ptp-leading-tight: 1.15;
+    --ptp-leading-normal: 1.55;
+    --ptp-tracking-caps: 0.06em;
+
+    /* ---- Space (4px base) ------------------------------------------------ */
+    --ptp-space-1: 0.25rem;
+    --ptp-space-2: 0.5rem;
+    --ptp-space-3: 0.75rem;
+    --ptp-space-4: 1rem;
+    --ptp-space-5: 1.5rem;
+    --ptp-space-6: 2rem;
+    --ptp-space-7: 3rem;
+    --ptp-space-8: 4rem;
+
+    /* ---- Radius --------------------------------------------------------- */
+    --ptp-radius-sm: 8px;
+    --ptp-radius: 12px;
+    --ptp-radius-lg: 16px;
+    --ptp-radius-full: 9999px;
+
+    /* ---- Elevation ------------------------------------------------------ */
+    --ptp-shadow-sm: 0 1px 2px rgba(10, 10, 10, 0.06);
+    --ptp-shadow: 0 2px 8px rgba(10, 10, 10, 0.08);
+    --ptp-shadow-lg: 0 12px 32px rgba(10, 10, 10, 0.12);
+
+    /* ---- Motion --------------------------------------------------------- */
+    --ptp-transition: 150ms ease;
+
+    /* ---- Layout --------------------------------------------------------- */
+    --ptp-container: 1120px;
+    --ptp-container-narrow: 680px;
+
+    /* Notch-safe insets, used by the sticky checkout bar on mobile. */
+    --ptp-safe-top: env(safe-area-inset-top, 0px);
+    --ptp-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --ptp-safe-left: env(safe-area-inset-left, 0px);
+    --ptp-safe-right: env(safe-area-inset-right, 0px);
+}
+
+/**
+ * The front end is a light, high-contrast sports brand and deliberately does
+ * not follow the OS theme — camp photography and the gold accent are colour-
+ * matched against the bone background. The admin plugin opts into dark mode
+ * separately, where it inherits WordPress's own scheme.
+ */
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --ptp-transition: 0ms;
+    }
+}

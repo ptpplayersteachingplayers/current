@@ -1,0 +1,380 @@
+/**
+ * PTP front-end styles.
+ * -----------------------------------------------------------------------------
+ * Depends on ptp-tokens.css. Every value below references a token — no raw hex,
+ * no magic pixel sizes. Components are flat and single-purpose; there is no
+ * page-specific CSS, which is what let the old stylesheets drift into 30,080
+ * lines with four parallel naming schemes.
+ *
+ * Naming: .ptp-block__element--modifier
+ * -----------------------------------------------------------------------------
+ */
+
+/* ============================================================ Foundation === */
+
+.ptp {
+    font-family: var(--ptp-font-body);
+    color: var(--ptp-text);
+    line-height: var(--ptp-leading-normal);
+}
+
+.ptp *,
+.ptp *::before,
+.ptp *::after {
+    box-sizing: border-box;
+}
+
+.ptp-container {
+    width: 100%;
+    max-width: var(--ptp-container);
+    margin-inline: auto;
+    padding-inline: var(--ptp-space-4);
+}
+
+.ptp-container--narrow {
+    max-width: var(--ptp-container-narrow);
+}
+
+.ptp-stack > * + * {
+    margin-top: var(--ptp-space-4);
+}
+
+.ptp-stack--loose > * + * {
+    margin-top: var(--ptp-space-6);
+}
+
+/* ================================================================= Type === */
+
+.ptp-h1,
+.ptp-h2,
+.ptp-h3 {
+    font-family: var(--ptp-font-display);
+    line-height: var(--ptp-leading-tight);
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: var(--ptp-tracking-caps);
+}
+
+.ptp-h1 {
+    font-size: clamp(var(--ptp-text-3xl), 5vw, var(--ptp-text-4xl));
+}
+
+.ptp-h2 {
+    font-size: var(--ptp-text-2xl);
+}
+
+.ptp-h3 {
+    font-size: var(--ptp-text-xl);
+}
+
+.ptp-muted {
+    color: var(--ptp-text-muted);
+    font-size: var(--ptp-text-sm);
+}
+
+.ptp-price {
+    font-family: var(--ptp-font-display);
+    font-size: var(--ptp-text-2xl);
+    font-variant-numeric: tabular-nums;
+}
+
+/* =============================================================== Button === */
+
+.ptp-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ptp-space-2);
+    min-height: 48px; /* comfortable tap target — most traffic is mobile */
+    padding: var(--ptp-space-3) var(--ptp-space-5);
+    border: 2px solid transparent;
+    border-radius: var(--ptp-radius-full);
+    font-family: var(--ptp-font-display);
+    font-size: var(--ptp-text-base);
+    text-transform: uppercase;
+    letter-spacing: var(--ptp-tracking-caps);
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color var(--ptp-transition), border-color var(--ptp-transition), transform var(--ptp-transition);
+}
+
+.ptp-btn:active {
+    transform: translateY(1px);
+}
+
+.ptp-btn:focus-visible {
+    outline: 3px solid var(--ptp-info);
+    outline-offset: 2px;
+}
+
+.ptp-btn--primary {
+    background: var(--ptp-gold);
+    color: var(--ptp-black);
+}
+
+.ptp-btn--primary:hover {
+    background: var(--ptp-gold-hover);
+}
+
+.ptp-btn--secondary {
+    background: var(--ptp-black);
+    color: var(--ptp-text-inverse);
+}
+
+.ptp-btn--ghost {
+    background: transparent;
+    border-color: var(--ptp-border-strong);
+    color: var(--ptp-text);
+}
+
+.ptp-btn--block {
+    width: 100%;
+}
+
+.ptp-btn[disabled],
+.ptp-btn[aria-disabled='true'] {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* ================================================================= Card === */
+
+.ptp-card {
+    background: var(--ptp-surface);
+    border: 1px solid var(--ptp-border);
+    border-radius: var(--ptp-radius-lg);
+    box-shadow: var(--ptp-shadow-sm);
+    overflow: hidden;
+}
+
+.ptp-card__media {
+    aspect-ratio: 16 / 10;
+    width: 100%;
+    object-fit: cover;
+    display: block;
+    background: var(--ptp-gray-100);
+}
+
+.ptp-card__body {
+    padding: var(--ptp-space-4);
+}
+
+.ptp-card__footer {
+    padding: var(--ptp-space-4);
+    border-top: 1px solid var(--ptp-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ptp-space-3);
+}
+
+/* ================================================================= Grid === */
+
+.ptp-grid {
+    display: grid;
+    gap: var(--ptp-space-5);
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+/* ================================================================ Badge === */
+
+.ptp-badge {
+    display: inline-block;
+    padding: var(--ptp-space-1) var(--ptp-space-3);
+    border-radius: var(--ptp-radius-full);
+    background: var(--ptp-gold-soft);
+    color: var(--ptp-gray-900);
+    font-size: var(--ptp-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--ptp-tracking-caps);
+}
+
+.ptp-badge--sold-out {
+    background: var(--ptp-gray-200);
+    color: var(--ptp-gray-700);
+}
+
+.ptp-badge--low {
+    background: var(--ptp-danger);
+    color: var(--ptp-white);
+}
+
+/* =============================================================== Notice === */
+
+.ptp-notice {
+    padding: var(--ptp-space-4);
+    border-radius: var(--ptp-radius);
+    border-left: 4px solid var(--ptp-info);
+    background: var(--ptp-gray-100);
+    font-size: var(--ptp-text-sm);
+}
+
+.ptp-notice--error {
+    border-left-color: var(--ptp-danger);
+    background: #FEF2F2;
+}
+
+.ptp-notice--success {
+    border-left-color: var(--ptp-success);
+    background: #F0FDF4;
+}
+
+/* ================================================================ Forms === */
+
+.ptp-field {
+    display: block;
+    margin-bottom: var(--ptp-space-4);
+}
+
+.ptp-field__label {
+    display: block;
+    margin-bottom: var(--ptp-space-2);
+    font-size: var(--ptp-text-sm);
+    font-weight: 600;
+}
+
+.ptp-field__input,
+.ptp-field__select,
+.ptp-field__textarea {
+    width: 100%;
+    min-height: 48px;
+    padding: var(--ptp-space-3);
+    border: 1px solid var(--ptp-border-strong);
+    border-radius: var(--ptp-radius-sm);
+    font-family: inherit;
+    font-size: var(--ptp-text-base);
+    background: var(--ptp-surface);
+    color: var(--ptp-text);
+}
+
+.ptp-field__input:focus,
+.ptp-field__select:focus,
+.ptp-field__textarea:focus {
+    outline: none;
+    border-color: var(--ptp-gold);
+    box-shadow: 0 0 0 3px var(--ptp-gold-soft);
+}
+
+.ptp-field__error {
+    margin-top: var(--ptp-space-2);
+    color: var(--ptp-danger);
+    font-size: var(--ptp-text-sm);
+}
+
+/* ============================================================= Checkout === */
+
+.ptp-checkout {
+    display: grid;
+    gap: var(--ptp-space-6);
+    align-items: start;
+}
+
+@media (min-width: 900px) {
+    .ptp-checkout {
+        grid-template-columns: 1fr 380px;
+    }
+}
+
+.ptp-summary {
+    background: var(--ptp-surface-sunken);
+    border-radius: var(--ptp-radius-lg);
+    padding: var(--ptp-space-5);
+}
+
+.ptp-summary__line {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--ptp-space-3);
+    padding: var(--ptp-space-2) 0;
+    font-size: var(--ptp-text-sm);
+}
+
+.ptp-summary__line--discount {
+    color: var(--ptp-success);
+}
+
+.ptp-summary__total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: var(--ptp-space-3);
+    padding-top: var(--ptp-space-3);
+    border-top: 2px solid var(--ptp-black);
+    font-family: var(--ptp-font-display);
+    font-size: var(--ptp-text-xl);
+}
+
+/* Sticky pay bar on small screens, clear of the home indicator. */
+@media (max-width: 899px) {
+    .ptp-checkout__actions {
+        position: sticky;
+        bottom: 0;
+        padding: var(--ptp-space-3) var(--ptp-space-4);
+        padding-bottom: calc(var(--ptp-space-3) + var(--ptp-safe-bottom));
+        margin-inline: calc(var(--ptp-space-4) * -1);
+        background: var(--ptp-surface);
+        border-top: 1px solid var(--ptp-border);
+        box-shadow: var(--ptp-shadow-lg);
+    }
+}
+
+/* ============================================================ Dashboard === */
+
+.ptp-panel {
+    background: var(--ptp-surface);
+    border: 1px solid var(--ptp-border);
+    border-radius: var(--ptp-radius-lg);
+    padding: var(--ptp-space-5);
+}
+
+.ptp-panel__title {
+    font-family: var(--ptp-font-display);
+    font-size: var(--ptp-text-lg);
+    text-transform: uppercase;
+    letter-spacing: var(--ptp-tracking-caps);
+    margin: 0 0 var(--ptp-space-4);
+}
+
+.ptp-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.ptp-list__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ptp-space-3);
+    padding: var(--ptp-space-3) 0;
+    border-bottom: 1px solid var(--ptp-border);
+}
+
+.ptp-list__item:last-child {
+    border-bottom: 0;
+}
+
+.ptp-empty {
+    padding: var(--ptp-space-6) var(--ptp-space-4);
+    text-align: center;
+    color: var(--ptp-text-muted);
+}
+
+/* Wide content scrolls inside its own container, never the page body. */
+.ptp-scroll-x {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.ptp-visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

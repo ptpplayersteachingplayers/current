@@ -11,9 +11,14 @@ wordpress/
 └── ptp-marketing/   landing pages, lead capture, attribution
 ```
 
-See [MIGRATION.md](MIGRATION.md) for the map from the previous five-plugin
-codebase, the shortcode and admin-screen consolidation tables, and the port
-order.
+Documents, in the order you need them:
+
+- **[SCOPE.md](SCOPE.md)** — what the platform is and what it is not. Read
+  first; it is the line the rebuild holds.
+- **[MIGRATION.md](MIGRATION.md)** — the map from the previous five-plugin
+  codebase: shortcode and admin-screen consolidation, and the port order.
+- **[DECOMMISSION.md](DECOMMISSION.md)** — removal plan for the cut product
+  lines, including the tables that must be migrated rather than dropped.
 
 ## Install
 

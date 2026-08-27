@@ -200,16 +200,46 @@ removing, then drop.
 
 ---
 
-## Not covered by this decision
+## Also removed
 
-Three things sit next to what you asked to remove but are not the same product.
-Flagging rather than assuming — say the word and they go too:
+Confirmed for removal alongside the three product lines above.
 
-| Feature | Size | Note |
-|---|---|---|
-| **Gift cards** (`class-ptp-gift-cards.php`) | 709 lines, 2 shortcodes | A sellable product, not a referral scheme. `class-ptp-page-creator.php` also references it. |
-| **Video analysis** (`ptp_video_analysis`) | shortcode only | Registered by mentorship code, but may be sold separately. |
-| **Post-booking share** (`agent-14-share-agent.php`) | 263 lines | Text-a-friend buttons on the receipt page and confirmation email. Growth feature, not a referral program with codes or rewards. |
+### Gift cards — 709 lines, 2 shortcodes
+
+```
+includes/class-ptp-gift-cards.php
+```
+
+Shortcodes `ptp_gift_cards`, `ptp_gift_card_balance`. Tables `ptp_gift_cards`
+and `ptp_gift_card_usage` are on the safe-to-drop list.
+
+One external reference to clean up: `class-ptp-page-creator.php` auto-creates a
+gift-card page. Remove that entry or the page is recreated on activation.
+
+**Check for outstanding balances before dropping the tables.** An unredeemed
+gift card is a liability you have already been paid for —
+`SELECT SUM(balance) FROM wp_ptp_gift_cards WHERE balance > 0` before you drop
+anything, and honour what is outstanding manually.
+
+### Video analysis — shortcode only
+
+`ptp_video_analysis` is registered inside `class-ptp-all-access-pass.php`, which
+is already on the membership kill list, so it goes with that file. The
+`ptp_video_analysis` table can be dropped once confirmed empty.
+
+### Post-booking share and the viral stack — 4 files
+
+```
+includes/agent-14-share-agent.php
+includes/class-ptp-social.php
+includes/class-ptp-viral-engine.php
+includes/class-ptp-viral-enhancements.php
+```
+
+`viral-engine` and `viral-enhancements` also read the referral tables, so they
+were already going to be orphaned by the referral removal. Retires the
+`ptp_share_buttons`, `ptp_social_share`, `ptp_social_proof`, `ptp_social_follow`,
+`ptp_trainer_share` and `ptp_review_share_modal` shortcodes.
 
 ---
 

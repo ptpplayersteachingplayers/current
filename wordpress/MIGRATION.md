@@ -93,12 +93,9 @@ Also dropped, unrelated to that decision:
   all replaced by `[ptp_landing variant=""]` in ptp-marketing.
 - Diagnostics: `ptp_debug`, `ptp_group_audit` — diagnostics belong in admin.
 
-### Still open — not part of the drop decision
-
-`ptp_gift_cards` / `ptp_gift_card_balance` (a sellable product),
-`ptp_video_analysis`, and the post-booking share buttons sit adjacent to the
-removed features but are not the same thing. See the table at the end of
-DECOMMISSION.md.
+Gift cards, video analysis and the post-booking share / viral stack are also
+removed — see DECOMMISSION.md. Check for unredeemed gift card balances before
+dropping those tables.
 
 ---
 
@@ -165,7 +162,6 @@ Stripe's own reporting before trusting it.
 
 - **Which old checkout is live in production.** Needed to plan the cutover and
   to know which page/shortcode customers actually hit today.
-- **Gift cards, video analysis and post-booking share** — adjacent to the
-  dropped features but distinct products. See the end of DECOMMISSION.md.
-
-Resolved: mentorship, memberships and referrals are dropped (DECOMMISSION.md).
+Resolved: mentorship, memberships, referrals, gift cards, video analysis and
+the viral/social stack are all dropped (DECOMMISSION.md). Scope is fixed at the
+nine core capabilities in SCOPE.md.

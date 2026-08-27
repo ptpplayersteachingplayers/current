@@ -35,6 +35,9 @@ final class PTP_Pricing
 
     private const TRANSIENT_PREFIX = 'ptp_quote_';
 
+    /** Upper bound on a single line's quantity. */
+    private const MAX_QUANTITY = 50;
+
     /**
      * Build a priced quote from item references.
      *
@@ -51,7 +54,7 @@ final class PTP_Pricing
             $line = $this->price_line(
                 isset($item['type']) ? sanitize_key($item['type']) : '',
                 isset($item['id']) ? absint($item['id']) : 0,
-                isset($item['qty']) ? max(1, absint($item['qty'])) : 1
+                $this->clamp_quantity($item['qty'] ?? 1)
             );
 
             if ($line === null) {
@@ -117,6 +120,21 @@ final class PTP_Pricing
     public function consume_quote(string $quote_id): void
     {
         delete_transient(self::TRANSIENT_PREFIX . sanitize_text_field($quote_id));
+    }
+
+    /**
+     * Normalise a requested quantity into a sane range.
+     *
+     * Deliberately not absint(): absint(-5) is 5, which would silently bill a
+     * customer for five places when their request said minus five. A malformed
+     * quantity means one, and an absurd one is capped rather than trusted —
+     * nobody books 10,000 camp places, but an integer overflow attempt will try.
+     */
+    private function clamp_quantity($raw): int
+    {
+        $qty = is_numeric($raw) ? (int) $raw : 1;
+
+        return max(1, min(self::MAX_QUANTITY, $qty));
     }
 
     /**

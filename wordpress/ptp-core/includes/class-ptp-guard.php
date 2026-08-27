@@ -100,16 +100,25 @@ final class PTP_Guard
         };
     }
 
-    /** Resolve the acting user from the session. The request body is never consulted. */
+    /**
+     * Resolve the acting user from the session. The request body is never consulted.
+     *
+     * Memoised per user id rather than per request: the logged-in user can change
+     * mid-request — registration calls wp_set_current_user() immediately after
+     * creating an account — and a plain static would keep serving the identity
+     * resolved before that switch.
+     */
     public function current_actor(): PTP_Actor
     {
-        static $actor = null;
+        static $actors = [];
 
-        if ($actor === null) {
-            $actor = PTP_Actor::from_user(get_current_user_id());
+        $user_id = get_current_user_id();
+
+        if (!isset($actors[$user_id])) {
+            $actors[$user_id] = PTP_Actor::from_user($user_id);
         }
 
-        return $actor;
+        return $actors[$user_id];
     }
 
     /**

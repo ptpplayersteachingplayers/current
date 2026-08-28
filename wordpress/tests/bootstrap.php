@@ -129,6 +129,7 @@ foreach ([
     'repositories/class-ptp-repository.php', 'repositories/class-ptp-repository-exception.php',
     'services/class-ptp-stripe.php', 'services/class-ptp-stripe-exception.php',
     'services/class-ptp-connect.php', 'class-ptp-slots.php', 'class-ptp-booking-intent.php',
+    'class-ptp-cancellation-policy.php', 'services/class-ptp-refunds.php',
 ] as $f) { require_once $core . $f; }
 
 // ---- ptp_core() container stub ------------------------------------------------

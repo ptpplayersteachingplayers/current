@@ -129,6 +129,69 @@ negative rates, grosses and durations clamped rather than inverting a transfer.
 
 ---
 
+## Cancellations and refunds
+
+One class decides what a cancellation is worth, so "how much do we refund?" has
+a single answer across the web, the mobile API and the admin screen.
+
+| When | Parent | Trainer |
+|---|---|---|
+| More than 24h before | Full refund | Payout withheld |
+| Less than 24h before | No refund | **Keeps their payout** |
+| Session already started | No refund | Keeps their payout |
+| Staff cancels, any time | Full refund | Payout withheld |
+
+The pairing is the point. Refunding the parent while still paying the trainer is
+a straight loss; withholding trainer pay on a late cancellation takes money off
+someone who held the time and turned other work away. A test asserts the costly
+combination — refund without reversal — never occurs at any notice period.
+
+The window is `ptp_free_cancel_hours` (option or filter), defaulting to 24.
+
+**Order of operations is deliberate.** The trainer's payout is reversed *first*,
+then the parent is refunded. If the refund call fails we have withheld money we
+still hold — recoverable, and `ptp_refund_failed` fires. Refunding first and
+then failing to reverse would mean paying a trainer out of money already
+returned to the customer, which is a real loss rather than a retry.
+
+**An already-transferred payout is never clawed back automatically** — reversing
+a completed transfer can overdraw a trainer's bank account, so
+`ptp_payout_already_sent` flags it for a human. In practice this is rare:
+payouts only move after a session is delivered, and a delivered session is not
+being cancelled.
+
+Refunds are partial and cumulative. Cancelling one session from a two-session
+order refunds only that session's share, scaled by what was actually paid so an
+order-level discount is shared proportionally. `orders.refunded_cents`
+accumulates, and nothing can refund past what was paid.
+
+Parents see the rule *before* confirming — the browser confirm and the mobile
+`cancellationNote` both come from `PTP_Cancellation_Policy::describe()`.
+
+---
+
+## Reminders
+
+An hourly cron sends a reminder the day before a session and again on the
+morning of it. No-shows are the most expensive outcome for a booked slot: the
+trainer is still paid, the parent is not refunded, and nobody is happy.
+
+Two rules stop it becoming a source of duplicate mail:
+
+- **Every send claims an idempotency key first**, via the same unique-index
+  claim the Stripe webhook uses. An overlapping cron run, a manual trigger and a
+  retry all collapse to one email. The claim happens *before* the send, so a
+  failed send does not remail on the next pass — a missed reminder is a smaller
+  problem than a duplicate one.
+- **A window, not an instant.** WP-Cron does not fire on time; a reminder due 90
+  minutes ago still goes out rather than being skipped because its exact moment
+  passed.
+
+WP-Cron only runs when the site gets traffic, so Settings has a **Send due
+reminders now** button for a quiet morning. It is safe to press repeatedly.
+
+---
+
 ## The two portals
 
 ### Parent — `[ptp_parent_dashboard]`
@@ -210,6 +273,11 @@ Training-specific coverage:
   chronological ordering, horizon and notice clamping, a booked slot removed
   from the list, a blocked date clearing the day, and `is_bookable()` rejecting
   a 3am start and an off-boundary start.
+- **Cancellation (32)** — the refund/payout pairing at every notice period
+  including both sides of the 24-hour boundary, staff overrides, sessions
+  already started, malformed dates refunding rather than silently keeping the
+  money, a configurable and clamped window, and the customer-facing wording
+  matching the decision it describes.
 - **Payouts (28)** — the assigned amount paid exactly; **a discounted session
   and a premium-priced session both paying the trainer the same**; flat vs
   hourly basis across 30/45/60/90-minute sessions; pro-rating rounding to whole
@@ -220,8 +288,9 @@ Training-specific coverage:
 
 ## Still to build
 
-- **Reminder emails** before a session; only the receipt exists.
 - **Trainer detail → book** deep link on the web trainer profile.
-- **Refunds and cancellation policy** — cancelling a booking does not yet refund
-  or reverse a pending payout row.
+- **Rescheduling** — a parent can cancel and rebook, but not move a session in
+  one step, which loses the slot in between.
+- **Trainer-side cancellation** — a trainer who cannot make it must contact
+  staff; they cannot release the session themselves.
 - Nothing here has run against a real WordPress install or the live Stripe API.

@@ -26,7 +26,7 @@ if (!defined('ABSPATH')) {
 final class PTP_Schema
 {
     /** Bump to trigger dbDelta on the next request after deploy. */
-    public const VERSION = '1.2.0';
+    public const VERSION = '1.3.0';
 
     private const OPTION_VERSION = 'ptp_schema_version';
 
@@ -186,6 +186,12 @@ final class PTP_Schema
                 paid_cents INT UNSIGNED NOT NULL DEFAULT 0,
                 discount_code VARCHAR(64) NOT NULL DEFAULT '',
                 stripe_payment_intent_id VARCHAR(64) NOT NULL DEFAULT '',
+                /**
+                 * Refunds are cumulative: a session cancelled from a two-session
+                 * order refunds part of it, and a later cancellation adds to
+                 * this rather than replacing it.
+                 */
+                refunded_cents INT UNSIGNED NOT NULL DEFAULT 0,
                 created_at DATETIME NOT NULL,
                 paid_at DATETIME DEFAULT NULL,
                 PRIMARY KEY (id),
@@ -323,6 +329,7 @@ final class PTP_Schema
                 minutes SMALLINT UNSIGNED NOT NULL DEFAULT 0,
                 status VARCHAR(20) NOT NULL DEFAULT 'pending',
                 stripe_transfer_id VARCHAR(64) NOT NULL DEFAULT '',
+                cancelled_reason VARCHAR(190) NOT NULL DEFAULT '',
                 available_at DATETIME DEFAULT NULL,
                 paid_at DATETIME DEFAULT NULL,
                 created_at DATETIME NOT NULL,

@@ -106,8 +106,16 @@ final class PTP_Bookings_Repository extends PTP_Repository
         );
     }
 
-    /** Cancel a booking, refusing when the actor does not own it. */
-    public function cancel(PTP_Actor $actor, int $booking_id): void
+    /**
+     * Cancel a booking and settle the money.
+     *
+     * Refuses when the actor does not own it. The status transition is guarded
+     * in SQL so a double-submit cannot refund twice — only a booking that was
+     * not already cancelled proceeds to settlement.
+     *
+     * @return array{refunded_cents: int, payout_reversed: bool, reason: string}
+     */
+    public function cancel(PTP_Actor $actor, int $booking_id): array
     {
         $booking = $this->find_for($actor, $booking_id);
 
@@ -115,13 +123,32 @@ final class PTP_Bookings_Repository extends PTP_Repository
             throw new PTP_Repository_Exception(__('Booking not found.', 'ptp'));
         }
 
-        $this->update_row(
-            $booking_id,
-            ['status' => 'cancelled', 'updated_at' => $this->now()],
-            ['%s', '%s']
+        if ($booking->status === 'completed') {
+            throw new PTP_Repository_Exception(__('That session has already been delivered.', 'ptp'));
+        }
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- conditional transition must be atomic
+        $updated = $this->db()->query(
+            $this->db()->prepare(
+                'UPDATE ' . $this->table() . ' SET status = %s, updated_at = %s WHERE id = %d AND status != %s',
+                'cancelled',
+                $this->now(),
+                $booking_id,
+                'cancelled'
+            )
         );
 
+        if ((int) $updated !== 1) {
+            throw new PTP_Repository_Exception(__('That session is already cancelled.', 'ptp'));
+        }
+
         do_action('ptp_booking_cancelled', $booking_id, $actor->user_id());
+
+        // Staff cancellations always refund; a parent's are subject to the cutoff.
+        return ptp_core()->refunds()->cancel_booking(
+            $booking_id,
+            $actor->is(PTP_Guard::ROLE_STAFF)
+        );
     }
 
     public function mark_confirmed(int $booking_id): void

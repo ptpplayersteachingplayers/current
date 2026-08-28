@@ -55,7 +55,7 @@ endif; ?>
                             data-action="<?php echo esc_attr($data['cancel_action']); ?>"
                             data-nonce="<?php echo esc_attr($data['cancel_nonce']); ?>"
                             data-field-booking_id="<?php echo esc_attr((string) $booking->id); ?>"
-                            data-confirm="<?php esc_attr_e('Cancel this session?', 'ptp'); ?>"
+                            data-confirm="<?php echo esc_attr($data['policy']->describe((string) $booking->starts_at) . ' ' . __('Cancel this session?', 'ptp')); ?>"
                             data-reload="1">
                             <?php esc_html_e('Cancel', 'ptp'); ?>
                         </button>

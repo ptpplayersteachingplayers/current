@@ -57,6 +57,20 @@ export interface BookingSummary {
   location: string;
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
   playerId: number | null;
+  /** Plain-language refund rule — show this before asking them to confirm. */
+  cancellationNote: string;
+  refundable: boolean;
+}
+
+export interface CancelResult {
+  cancelled: boolean;
+  refundedCents: number;
+  reason:
+    | 'cancelled_in_time'
+    | 'cancelled_late'
+    | 'session_passed'
+    | 'staff_cancelled'
+    | 'unknown_start';
 }
 
 export interface PlayerSummary {
@@ -151,8 +165,15 @@ export const getMyBookings = () => get<BookingSummary[]>('/me/bookings');
 export const holdSlot = (trainerId: number, startsAt: string, playerId: number) =>
   post<HoldResult>('/bookings/hold', { trainerId, startsAt, playerId });
 
+/**
+ * Cancel a booking.
+ *
+ * The refund is decided server-side by the cancellation policy — the app does
+ * not ask for an amount. `refundedCents` in the response says what is actually
+ * coming back, which is what to tell the parent.
+ */
 export const cancelBooking = (bookingId: number) =>
-  post<{ cancelled: boolean }>(`/bookings/${bookingId}/cancel`);
+  post<CancelResult>(`/bookings/${bookingId}/cancel`);
 
 // =============================================================================
 // Trainer — requires an authenticated trainer

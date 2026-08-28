@@ -47,6 +47,7 @@ final class PTP_Page_Parent_Dashboard extends PTP_Page
             'orders'         => ptp_core()->orders()->history_for($actor),
             'cancel_action'  => self::AJAX_CANCEL,
             'cancel_nonce'   => $this->nonce(self::AJAX_CANCEL),
+            'policy'         => ptp_core()->cancellation_policy(),
             'book_url'       => PTP_Public_Links::book(),
         ];
     }
@@ -65,11 +66,20 @@ final class PTP_Page_Parent_Dashboard extends PTP_Page
         $booking_id = isset($_POST['booking_id']) ? absint($_POST['booking_id']) : 0;
 
         try {
-            ptp_core()->bookings()->cancel($actor, $booking_id);
+            $result = ptp_core()->bookings()->cancel($actor, $booking_id);
         } catch (PTP_Repository_Exception $e) {
             wp_send_json_error(['message' => $e->getMessage()], 400);
         }
 
-        wp_send_json_success(['message' => __('Booking cancelled.', 'ptp')]);
+        // Say plainly whether money is coming back, rather than a bare "done".
+        $message = $result['refunded_cents'] > 0
+            ? sprintf(
+                /* translators: %s: refund amount */
+                __('Cancelled. %s will be back on your card within a few days.', 'ptp'),
+                $this->money($result['refunded_cents'])
+            )
+            : __('Cancelled. This session was inside the no-refund window, so no refund is due.', 'ptp');
+
+        wp_send_json_success(['message' => $message]);
     }
 }

@@ -112,3 +112,19 @@
         background: transparent;
     }
 }
+
+/* Per-order session list with its cancel action. */
+.ptp-admin__bookings {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--ptp-text-sm);
+}
+
+.ptp-admin__bookings li {
+    display: flex;
+    align-items: center;
+    gap: var(--ptp-space-2);
+    padding: var(--ptp-space-1) 0;
+    flex-wrap: wrap;
+}

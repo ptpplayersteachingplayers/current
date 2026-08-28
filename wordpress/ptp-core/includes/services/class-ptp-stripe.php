@@ -177,6 +177,36 @@ final class PTP_Stripe
         );
     }
 
+    /**
+     * Refund part or all of a payment.
+     *
+     * The amount is computed by PTP_Refunds from order items — there is no path
+     * for a caller to name an arbitrary figure. Idempotency is keyed on the
+     * booking so a retried cancellation cannot refund twice.
+     *
+     * @param array<string, string> $metadata
+     * @return array<string, mixed>
+     */
+    public function create_refund(string $payment_intent_id, int $amount_cents, array $metadata = []): array
+    {
+        if ($amount_cents <= 0) {
+            throw new PTP_Stripe_Exception(__('Nothing to refund.', 'ptp'));
+        }
+
+        $booking_ref = $metadata['ptp_booking_id'] ?? '';
+
+        return $this->request(
+            'refunds',
+            [
+                'payment_intent' => $payment_intent_id,
+                'amount'         => $amount_cents,
+                'metadata'       => $metadata,
+            ],
+            'POST',
+            $booking_ref !== '' ? 'ptp_refund_' . $booking_ref : null
+        );
+    }
+
     /** @return array<string, mixed> */
     public function retrieve_account(string $account_id): array
     {

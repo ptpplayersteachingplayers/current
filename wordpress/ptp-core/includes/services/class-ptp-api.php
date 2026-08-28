@@ -216,12 +216,16 @@ final class PTP_Api
     public function cancel_booking(WP_REST_Request $request)
     {
         try {
-            ptp_core()->bookings()->cancel($this->actor(), (int) $request['id']);
+            $result = ptp_core()->bookings()->cancel($this->actor(), (int) $request['id']);
         } catch (PTP_Repository_Exception $e) {
             return $this->error($e->getMessage(), 404);
         }
 
-        return $this->ok(['cancelled' => true]);
+        return $this->ok([
+            'cancelled'      => true,
+            'refundedCents'  => $result['refunded_cents'],
+            'reason'         => $result['reason'],
+        ]);
     }
 
     // -- trainer --------------------------------------------------------------
@@ -331,6 +335,8 @@ final class PTP_Api
     /** @return array<string, mixed> */
     private function present_booking(object $b): array
     {
+        $policy = ptp_core()->cancellation_policy();
+
         return [
             'id'       => (int) $b->id,
             'type'     => $b->booking_type,
@@ -339,6 +345,12 @@ final class PTP_Api
             'location' => $b->location,
             'status'   => $b->status,
             'playerId' => $b->player_id !== null ? (int) $b->player_id : null,
+            /**
+             * The app shows this before asking the parent to confirm, so the
+             * refund rule is never a surprise after the fact.
+             */
+            'cancellationNote' => $policy->describe((string) $b->starts_at),
+            'refundable'       => $policy->decide((string) $b->starts_at)['refund'],
         ];
     }
 

@@ -75,6 +75,7 @@ final class PTP_Core
         (new PTP_Booking_Fulfilment())->register_hooks();
         (new PTP_Training_Catalogue())->register();
         $this->mail()->register_hooks();
+        $this->reminders()->register_hooks();
         $this->api()->register_hooks();
 
         /**
@@ -114,7 +115,18 @@ final class PTP_Core
         return $this->service(PTP_Stripe::class);
     }
 
-    /** Stripe Connect: trainer onboarding, the fee split, and payouts. */
+    /** Refunds and payout reversal, governed by the cancellation policy. */
+    public function refunds(): PTP_Refunds
+    {
+        return $this->service(PTP_Refunds::class);
+    }
+
+    public function cancellation_policy(): PTP_Cancellation_Policy
+    {
+        return $this->service(PTP_Cancellation_Policy::class);
+    }
+
+    /** Stripe Connect: trainer onboarding, the per-trainer amount, and payouts. */
     public function connect(): PTP_Connect
     {
         return $this->service(PTP_Connect::class);
@@ -140,6 +152,12 @@ final class PTP_Core
     public function mail(): PTP_Mail
     {
         return $this->service(PTP_Mail::class);
+    }
+
+    /** Hourly cron that mails session reminders. */
+    public function reminders(): PTP_Reminders
+    {
+        return $this->service(PTP_Reminders::class);
     }
 
     public function parents(): PTP_Parents_Repository
@@ -185,5 +203,12 @@ function ptp_core(): PTP_Core
 }
 
 register_activation_hook(__FILE__, ['PTP_Schema', 'install']);
+
+/**
+ * Clear the reminder cron on deactivation. Leaving a scheduled hook behind
+ * means WordPress keeps firing an action nothing handles — harmless, but it
+ * also means reactivating double-schedules it.
+ */
+register_deactivation_hook(__FILE__, ['PTP_Reminders', 'unschedule']);
 
 ptp_core();

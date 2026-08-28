@@ -48,6 +48,26 @@ final class PTP_Screen_Settings extends PTP_Screen
         $this->notice(__('Settings saved.', 'ptp'));
     }
 
+    /**
+     * Send any reminders currently due.
+     *
+     * WP-Cron only runs when the site gets traffic, so a quiet morning can
+     * delay reminders. This gives staff a way to push them without waiting.
+     * Safe to press repeatedly — each reminder claims an idempotency key.
+     */
+    protected function do_send_reminders(): void
+    {
+        $sent = ptp_core()->reminders()->run();
+
+        $this->notice(
+            sprintf(
+                /* translators: %d: number of reminder emails sent */
+                _n('%d reminder sent.', '%d reminders sent.', $sent, 'ptp'),
+                $sent
+            )
+        );
+    }
+
     protected function body(): void
     {
         ?>
@@ -89,6 +109,27 @@ final class PTP_Screen_Settings extends PTP_Screen
 
             <?php submit_button(__('Save settings', 'ptp')); ?>
         </form>
+
+        <h2><?php esc_html_e('Cancellations', 'ptp'); ?></h2>
+        <p class="description">
+            <?php
+            printf(
+                /* translators: %d: hours of notice for a full refund */
+                esc_html__('Parents get a full refund when they cancel at least %d hours before a session. Inside that window there is no refund and the trainer keeps their payout. Staff cancellations always refund.', 'ptp'),
+                (int) ptp_core()->cancellation_policy()->free_cancel_hours()
+            );
+            ?>
+        </p>
+
+        <h2><?php esc_html_e('Reminders', 'ptp'); ?></h2>
+        <p class="description">
+            <?php esc_html_e('Reminders go out the day before a session and again on the morning of it. WP-Cron only runs when the site gets traffic, so on a quiet morning you can push them manually.', 'ptp'); ?>
+        </p>
+        <p>
+            <a class="button" href="<?php echo esc_url($this->action_url('send_reminders')); ?>">
+                <?php esc_html_e('Send due reminders now', 'ptp'); ?>
+            </a>
+        </p>
         <?php
     }
 }

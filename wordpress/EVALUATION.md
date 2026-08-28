@@ -4,19 +4,22 @@ An honest assessment of the four new plugins before you commit to them, written
 after building them and then trying to break them.
 
 **Verdict: the core is sound and the security properties hold under test. With
-the training side, signed quotes and the Elements mount added, it is roughly 80%
-of a working platform — and the remaining 20% is known and listed.**
+the training side, signed quotes, the Elements mount, refunds and reminders
+added, it is roughly 85% of a working platform — and what is missing is known
+and listed. The gating item is no longer code: it is one hour on a staging
+site.**
 
 ---
 
 ## What was actually verified
 
-115 assertions across 7 suites, run with `php tests/run.php`. These are not
+147 assertions across 8 suites, run with `php tests/run.php`. These are not
 smoke tests — each one is written as the attack it defends against, using the
 exact shapes found in the audit of the old codebase.
 
 | Suite | Asserts | What it proves |
 |---|---|---|
+| `test-cancellation` | 32 | A refund and a payout reversal never disagree costly |
 | `test-payouts` | 28 | A trainer is paid the amount assigned, whatever the price |
 | `test-authorisation` | 21 | One account cannot act as another |
 | `test-slots` | 20 | Availability turns into the right bookable times |
@@ -135,8 +138,8 @@ register, trainer application; admin Schedule, Customers, Discounts.
 - The data migration from the old tables
 - Camp/clinic admin editing beyond the WordPress post editor
 - Reminder emails (only the receipt exists)
-- Refunds: cancelling a booking does not yet refund the parent or reverse a
-  pending payout row
+- Rescheduling in one step (cancel-and-rebook works, but loses the slot between)
+- Trainer-side cancellation — a trainer who cannot make it must contact staff
 
 ---
 

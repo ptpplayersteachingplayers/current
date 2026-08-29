@@ -57,6 +57,87 @@ comment on function is_admin is
   'Reads a claim set server-side at sign-in. Never a table lookup a client could write to.';
 
 -- =============================================================================
+-- Authorisation for SECURITY DEFINER functions
+-- =============================================================================
+-- RLS protects tables. It does not protect a SECURITY DEFINER function, which
+-- runs as its owner and sees everything — and those functions take ids as
+-- arguments. begin_checkout(kind, player_id, …) called with someone else's
+-- player id is precisely the defect the audit found throughout the old
+-- platform, moved to a new place.
+--
+-- So every function a browser can reach asserts, in its own body, that the
+-- caller may act on the subject. auth.uid() being null means there is no end
+-- user: a scheduled job, a webhook, or an edge function using the service key.
+-- Those are already inside the trust boundary.
+
+create or replace function assert_household_access(p_household_id uuid)
+returns void
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then return; end if;          -- system, job or webhook
+  if is_admin() then return; end if;
+  if current_household_id() = p_household_id then return; end if;
+
+  raise exception 'That does not belong to your household'
+    using errcode = 'insufficient_privilege';
+end;
+$$;
+
+create or replace function assert_player_access(p_player_id uuid)
+returns void
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_household uuid;
+begin
+  if auth.uid() is null then return; end if;
+  if is_admin() then return; end if;
+
+  select household_id into v_household from players where id = p_player_id;
+
+  -- A missing player and someone else's player get the same answer, so the
+  -- error cannot be used to discover which ids exist.
+  if v_household is null or v_household is distinct from current_household_id() then
+    raise exception 'That does not belong to your household'
+      using errcode = 'insufficient_privilege';
+  end if;
+end;
+$$;
+
+create or replace function assert_can_coach_session(p_session_id uuid)
+returns void
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then return; end if;
+  if is_admin() then return; end if;
+
+  if exists (
+    select 1 from sessions s
+    where s.id = p_session_id and s.trainer_id = current_trainer_id()
+  ) then
+    return;
+  end if;
+
+  raise exception 'You are not the trainer for that session'
+    using errcode = 'insufficient_privilege';
+end;
+$$;
+
+comment on function assert_player_access is
+  'Called at the top of every SECURITY DEFINER function a client can reach. RLS does not apply inside a definer function, so the check has to be written out.';
+
+-- =============================================================================
 -- Enable RLS everywhere
 -- =============================================================================
 

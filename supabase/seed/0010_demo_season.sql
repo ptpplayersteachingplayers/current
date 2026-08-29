@@ -1,11 +1,11 @@
 -- =============================================================================
 -- 0010 — Demo season
 -- =============================================================================
--- One eight-week season, six groups meeting twice a week, three trainers, three
--- verified fields, and five families in deliberately different states so every
+-- One eight-week season, six groups meeting twice a week, four trainers, three
+-- verified fields, and seven families in deliberately different states so every
 -- screen has something real to render:
 --
---   Group A  Full        6 paid — waitlist has someone on it
+--   Group A  Full        6 paid — Ada is waiting, and is eligible
 --   Group B  Forming     2 paid
 --   Group C  Confirmed   4 paid — exactly on the activation line
 --   Group D  Forming     3 paid — one booking away from confirming
@@ -14,6 +14,10 @@
 --
 -- Group F exists to prove the activation guard fires. It should be impossible
 -- to move it out of draft until its location is verified.
+--
+-- The Adeyemi family have browsed and not paid. Tayo is eligible for Group D
+-- and enrolled nowhere, which makes them the fourth family the checkout tests
+-- run through — and the one the AI agent should be chasing hardest.
 --
 -- Safe to re-run: everything is keyed and uses ON CONFLICT DO NOTHING.
 -- =============================================================================
@@ -74,25 +78,29 @@ on conflict do nothing;
 -- =============================================================================
 
 insert into trainers (id, display_name, slug, bio, phone, email, hourly_pay_cents,
-                      status, background_check_status, background_check_expires_at)
+                      status, background_check_status, background_check_expires_at,
+                      auth_user_id)
 values
   ('22222222-0000-0000-0000-000000000001', 'Marcus Bell', 'marcus-bell',
    'Four years NCAA Division I midfield. Coaches the small-sided possession work the older groups run on.',
-   '+12155550101', 'marcus@example.test', 4000, 'active', 'cleared', current_date + 300),
+   '+12155550101', 'marcus@example.test', 4000, 'active', 'cleared', current_date + 300,
+   '88888888-0000-0000-0000-000000000001'),
 
   ('22222222-0000-0000-0000-000000000002', 'Dani Okoro', 'dani-okoro',
    'Former academy forward. Runs the U9–U11 groups; very good with players new to structured training.',
-   '+12155550102', 'dani@example.test', 4000, 'active', 'cleared', current_date + 180),
+   '+12155550102', 'dani@example.test', 4000, 'active', 'cleared', current_date + 180,
+   '88888888-0000-0000-0000-000000000002'),
 
   ('22222222-0000-0000-0000-000000000003', 'Sam Whitfield', 'sam-whitfield',
    'Goalkeeping and defensive shape. Weekend privates.',
-   '+12155550103', 'sam@example.test', 4500, 'active', 'cleared', current_date + 95),
+   '+12155550103', 'sam@example.test', 4500, 'active', 'cleared', current_date + 95,
+   '88888888-0000-0000-0000-000000000003'),
 
   -- Applied but not cleared. Cannot be assigned to a group — the guard in 0003
   -- rejects it, which is the point of seeding them.
   ('22222222-0000-0000-0000-000000000004', 'Jordan Pace', 'jordan-pace',
    'Application in review.', '+12155550104', 'jordan@example.test', 4000,
-   'pending', 'pending', null)
+   'pending', 'pending', null, '88888888-0000-0000-0000-000000000004')
 on conflict (id) do nothing;
 
 insert into trainer_availability (trainer_id, weekday, starts_time, ends_time, location_id, kind) values
@@ -177,19 +185,26 @@ insert into households (id, display_name) values
   ('55555555-0000-0000-0000-000000000003', 'Okafor family'),
   ('55555555-0000-0000-0000-000000000004', 'Brennan family'),
   ('55555555-0000-0000-0000-000000000005', 'Silva family'),
-  ('55555555-0000-0000-0000-000000000006', 'Hartley family')
+  ('55555555-0000-0000-0000-000000000006', 'Hartley family'),
+  -- Browsed, has not paid. Group D is one family short and this is the family.
+  -- Every checkout assertion in verify.sh runs through this household.
+  ('55555555-0000-0000-0000-000000000007', 'Adeyemi family')
 on conflict (id) do nothing;
 
-insert into contacts (household_id, first_name, last_name, email, phone, is_primary) values
-  ('55555555-0000-0000-0000-000000000001', 'Luke',  'Martelli', 'luke.demo@example.test',  '+12155550201', true),
+-- auth_user_id would normally be filled in when the parent registers. The demo
+-- sets it so the row-level security and authorisation checks can be exercised
+-- as a real signed-in parent rather than as the owner of the database.
+insert into contacts (household_id, auth_user_id, first_name, last_name, email, phone, is_primary) values
+  ('55555555-0000-0000-0000-000000000001', '77777777-0000-0000-0000-000000000001', 'Luke',  'Martelli', 'luke.demo@example.test',  '+12155550201', true),
   -- Two parents, one household. The old schema could not express this without
   -- duplicating the children.
-  ('55555555-0000-0000-0000-000000000001', 'Elena', 'Martelli', 'elena.demo@example.test', '+12155550202', false),
-  ('55555555-0000-0000-0000-000000000002', 'Mai',   'Nguyen',   'mai.demo@example.test',   '+12155550203', true),
-  ('55555555-0000-0000-0000-000000000003', 'Chidi', 'Okafor',   'chidi.demo@example.test', '+12155550204', true),
-  ('55555555-0000-0000-0000-000000000004', 'Aoife', 'Brennan',  'aoife.demo@example.test', '+12155550205', true),
-  ('55555555-0000-0000-0000-000000000005', 'Rafa',  'Silva',    'rafa.demo@example.test',  '+12155550206', true),
-  ('55555555-0000-0000-0000-000000000006', 'Kate',  'Hartley',  'kate.demo@example.test',  '+12155550207', true)
+  ('55555555-0000-0000-0000-000000000001', '77777777-0000-0000-0000-000000000002', 'Elena', 'Martelli', 'elena.demo@example.test', '+12155550202', false),
+  ('55555555-0000-0000-0000-000000000002', '77777777-0000-0000-0000-000000000003', 'Mai',   'Nguyen',   'mai.demo@example.test',   '+12155550203', true),
+  ('55555555-0000-0000-0000-000000000003', '77777777-0000-0000-0000-000000000004', 'Chidi', 'Okafor',   'chidi.demo@example.test', '+12155550204', true),
+  ('55555555-0000-0000-0000-000000000004', '77777777-0000-0000-0000-000000000005', 'Aoife', 'Brennan',  'aoife.demo@example.test', '+12155550205', true),
+  ('55555555-0000-0000-0000-000000000005', '77777777-0000-0000-0000-000000000006', 'Rafa',  'Silva',    'rafa.demo@example.test',  '+12155550206', true),
+  ('55555555-0000-0000-0000-000000000006', '77777777-0000-0000-0000-000000000007', 'Kate',  'Hartley',  'kate.demo@example.test',  '+12155550207', true),
+  ('55555555-0000-0000-0000-000000000007', '77777777-0000-0000-0000-000000000008', 'Simi',  'Adeyemi',  'simi.demo@example.test',  '+12155550208', true)
 on conflict do nothing;
 
 insert into players (id, household_id, first_name, last_name, birth_date, skill_level, club_team, position) values
@@ -204,7 +219,10 @@ insert into players (id, household_id, first_name, last_name, birth_date, skill_
   ('66666666-0000-0000-0000-000000000009', '55555555-0000-0000-0000-000000000003', 'Tunde', 'Okafor',   current_date - interval '14 years', 4, 'Keystone FC',   'Midfield'),
   ('66666666-0000-0000-0000-00000000000a', '55555555-0000-0000-0000-000000000004', 'Cara',  'Brennan',  current_date - interval '8 years',  1, '',              'Forward'),
   ('66666666-0000-0000-0000-00000000000b', '55555555-0000-0000-0000-000000000005', 'Mateo', 'Silva',    current_date - interval '14 years', 4, 'Valley United', 'Defender'),
-  ('66666666-0000-0000-0000-00000000000c', '55555555-0000-0000-0000-000000000006', 'Ada',   'Hartley',  current_date - interval '13 years', 3, 'Keystone FC',   'Midfield')
+  ('66666666-0000-0000-0000-00000000000c', '55555555-0000-0000-0000-000000000006', 'Ada',   'Hartley',  current_date - interval '13 years', 3, 'Keystone FC',   'Midfield'),
+  -- Eligible for Group D and deliberately not enrolled: the fourth paid player
+  -- who would activate it.
+  ('66666666-0000-0000-0000-00000000000d', '55555555-0000-0000-0000-000000000007', 'Tayo',  'Adeyemi',  current_date - interval '8 years',  2, '',              'Midfield')
 on conflict (id) do nothing;
 
 commit;
@@ -269,9 +287,11 @@ insert into enrollments (group_id, player_id, household_id, is_paid) values
   ('44444444-0000-0000-0000-00000000000d', '66666666-0000-0000-0000-00000000000a', '55555555-0000-0000-0000-000000000004', true)
 on conflict do nothing;
 
--- A waitlist entry against the full group.
+-- A waitlist entry against the full group. Ada is eligible for it — a waitlist
+-- of players who could not actually be enrolled would make every promotion
+-- test pass for the wrong reason.
 insert into waitlists (group_id, player_id, household_id, position) values
-  ('44444444-0000-0000-0000-00000000000a', '66666666-0000-0000-0000-000000000009', '55555555-0000-0000-0000-000000000003', 1)
+  ('44444444-0000-0000-0000-00000000000a', '66666666-0000-0000-0000-00000000000c', '55555555-0000-0000-0000-000000000006', 1)
 on conflict do nothing;
 
 -- =============================================================================

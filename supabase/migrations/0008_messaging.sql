@@ -149,7 +149,10 @@ begin
     (p_context ->> 'payment_id')::uuid,
     (p_context ->> 'group_id')::uuid
   )
-  on conflict (dedupe_key) do nothing
+  -- The index is partial (dedupe_key is not null), and Postgres will only use
+  -- it for inference if the predicate is repeated here. Without this the clause
+  -- raises rather than de-duplicating — which is the whole point of it.
+  on conflict (dedupe_key) where dedupe_key is not null do nothing
   returning * into v_row;
 
   -- Nothing inserted means the dedupe key was already used: this exact message

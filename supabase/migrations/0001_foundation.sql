@@ -132,6 +132,14 @@ as $$
   select coalesce((select (value #>> '{}')::boolean from system_settings where key = p_key), p_default);
 $$;
 
+create or replace function setting_text(p_key text, p_default text)
+returns text
+language sql
+stable
+as $$
+  select coalesce((select value #>> '{}' from system_settings where key = p_key), p_default);
+$$;
+
 -- The global automation pause. Every scheduled job and every outbound message
 -- checks this first. One switch, checked everywhere, so "stop the robots" is a
 -- single action during an incident.
@@ -200,10 +208,18 @@ create table webhook_events (
   event_type    text not null,
   payload       jsonb not null,
   received_at   timestamptz not null default now(),
+
+  -- Claimed but not finished. Null means available to claim: either it has
+  -- never been seen, or a handler failed and released it for the provider to
+  -- retry. failed_at is set only when we have given up, and a given-up event
+  -- is never re-claimed automatically.
+  claimed_at    timestamptz,
   processed_at  timestamptz,
   failed_at     timestamptz,
   attempts      integer not null default 0,
   last_error    text,
+  result        jsonb,
+
   unique (source, external_id)
 );
 
@@ -228,16 +244,86 @@ security definer
 set search_path = public
 as $$
 declare
-  v_inserted integer;
+  v_claimed integer;
 begin
-  insert into webhook_events (source, external_id, event_type, payload)
-  values (p_source, p_external_id, p_event_type, p_payload)
-  on conflict (source, external_id) do nothing;
+  insert into webhook_events (source, external_id, event_type, payload, claimed_at, attempts)
+  values (p_source, p_external_id, p_event_type, p_payload, now(), 1)
+  on conflict (source, external_id) do update
+    set claimed_at = now(),
+        attempts   = webhook_events.attempts + 1,
+        payload    = excluded.payload
+    -- Re-claimable only if a previous attempt released it, and never once we
+    -- have given up on it. An event that is claimed, processed, or failed for
+    -- good is not handed out again.
+    where webhook_events.claimed_at is null
+      and webhook_events.processed_at is null
+      and webhook_events.failed_at is null;
 
-  get diagnostics v_inserted = row_count;
+  get diagnostics v_claimed = row_count;
 
-  return v_inserted = 1;
+  return v_claimed = 1;
 end;
+$$;
+
+-- A handler that failed releases the event so the provider's next retry can
+-- pick it up — up to a limit, past which retrying is just noise and a person
+-- needs the payload. Returns whether the caller should ask for a retry.
+create or replace function release_webhook_event(
+  p_source      text,
+  p_external_id text,
+  p_error       text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_attempts integer;
+  v_max      integer := setting_int('webhook_max_attempts', 5);
+begin
+  select attempts into v_attempts
+  from webhook_events
+  where source = p_source and external_id = p_external_id;
+
+  if v_attempts is null then
+    return false;
+  end if;
+
+  if v_attempts >= v_max then
+    update webhook_events
+    set failed_at = now(), last_error = p_error, claimed_at = null
+    where source = p_source and external_id = p_external_id;
+
+    perform escalate('payment',
+      format('Gave up processing %s event after %s attempts', p_source, v_attempts),
+      'urgent', 'webhook_events', null,
+      jsonb_build_object('external_id', p_external_id, 'error', p_error));
+
+    return false;
+  end if;
+
+  update webhook_events
+  set claimed_at = null, last_error = p_error
+  where source = p_source and external_id = p_external_id;
+
+  return true;
+end;
+$$;
+
+create or replace function complete_webhook_event(
+  p_source      text,
+  p_external_id text,
+  p_result      jsonb default '{}'::jsonb
+)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update webhook_events
+  set processed_at = now(), result = p_result, last_error = null
+  where source = p_source and external_id = p_external_id;
 $$;
 
 -- =============================================================================

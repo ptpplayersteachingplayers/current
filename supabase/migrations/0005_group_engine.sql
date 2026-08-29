@@ -99,6 +99,53 @@ as $$
   select p.n, h.n, p.n + h.n, g.max_players from g, p, h;
 $$;
 
+-- Group occupancy answers "is there a place in this group for the season?".
+-- It is not the same question as "is there room on the field on Thursday?" — a
+-- group of four enrolled players with two drop-ins is six bodies. Sessions get
+-- their own count, and both are checked before a hold is issued.
+create or replace function session_occupancy(p_session_id uuid)
+returns table (taken integer, capacity integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with s as (
+    select s.id, s.group_id, s.kind from sessions s where s.id = p_session_id
+  ),
+  booked as (
+    select count(distinct b.player_id)::integer as n
+    from bookings b, s
+    where b.session_id = s.id and b.status not in ('canceled','refunded')
+  ),
+  held as (
+    select count(distinct bh.player_id)::integer as n
+    from booking_holds bh, s
+    where bh.session_id = s.id
+      and bh.expires_at > now()
+      and not exists (
+        select 1 from bookings b
+        where b.session_id = s.id and b.player_id = bh.player_id
+          and b.status not in ('canceled','refunded')
+      )
+  )
+  select booked.n + held.n,
+         case when s.kind = 'private' then 1
+              else coalesce((select g.max_players from training_groups g where g.id = s.group_id), 1)
+         end
+  from s, booked, held;
+$$;
+
+create or replace function session_has_space(p_session_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select taken < capacity from session_occupancy(p_session_id)), false);
+$$;
+
 create or replace function group_has_space(p_group_id uuid)
 returns boolean
 language sql
@@ -173,19 +220,8 @@ create or replace function enrollments_after_change()
 returns trigger
 language plpgsql
 as $$
-declare
-  v_group uuid;
 begin
-  v_group := coalesce(new.group_id, old.group_id);
-  perform recompute_group_status(v_group);
-
-  update sessions s
-  set paid_count = (
-    select count(*) from enrollments e
-    where e.group_id = s.group_id and e.state = 'active' and e.is_paid
-  )
-  where s.group_id = v_group;
-
+  perform recompute_group_status(coalesce(new.group_id, old.group_id));
   return null;
 end;
 $$;
@@ -193,6 +229,34 @@ $$;
 create trigger enrollments_recompute
   after insert or update or delete on enrollments
   for each row execute function enrollments_after_change();
+
+-- sessions.paid_count is how many people are actually expected on the field,
+-- which is a booking count — enrolled families and drop-ins alike. The roster
+-- screen and the trainer's phone read this, so it must mean attendance, not
+-- commitment.
+create or replace function bookings_after_change()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_session uuid;
+begin
+  v_session := coalesce(new.session_id, old.session_id);
+
+  update sessions s
+  set paid_count = (
+    select count(distinct b.player_id) from bookings b
+    where b.session_id = v_session and b.status not in ('canceled','refunded')
+  )
+  where s.id = v_session;
+
+  return null;
+end;
+$$;
+
+create trigger bookings_recount
+  after insert or update or delete on bookings
+  for each row execute function bookings_after_change();
 
 -- =============================================================================
 -- Holds
@@ -228,6 +292,8 @@ begin
     raise exception 'That session has already started' using errcode = 'check_violation';
   end if;
 
+  perform assert_player_access(p_player_id);
+
   select * into v_player from players where id = p_player_id;
   if not found then
     raise exception 'Unknown player' using errcode = 'no_data_found';
@@ -244,6 +310,12 @@ begin
     if not group_has_space(v_session.group_id) then
       raise exception 'That group is full' using errcode = 'check_violation';
     end if;
+  end if;
+
+  -- And there has to be room on the field that day. This is the check that
+  -- stops drop-ins overfilling a session the enrolled families already fill.
+  if not session_has_space(p_session_id) then
+    raise exception 'That session is full' using errcode = 'check_violation';
   end if;
 
   v_minutes := setting_int('hold_minutes', 15);
@@ -335,7 +407,8 @@ create or replace function confirm_booking(
   p_player_id  uuid,
   p_payment_id uuid default null,
   p_credit_id  uuid default null,
-  p_price_cents integer default 0
+  p_price_cents integer default 0,
+  p_enroll     boolean default false
 )
 returns bookings
 language plpgsql
@@ -377,9 +450,10 @@ begin
     where id = p_credit_id;
   end if;
 
-  -- A group booking also enrolls the player for the season, which is what
-  -- drives activation.
-  if v_session.group_id is not null then
+  -- Enrolment is a season commitment and is asked for explicitly. A drop-in is
+  -- one Thursday, not a promise: four families dropping in on the same evening
+  -- must not activate a group and commit a trainer to sixteen sessions.
+  if p_enroll and v_session.group_id is not null then
     insert into enrollments (group_id, player_id, household_id, is_paid)
     values (v_session.group_id, p_player_id, v_player.household_id, true)
     on conflict (group_id, player_id) where state = 'active'
@@ -398,7 +472,7 @@ end;
 $$;
 
 comment on function confirm_booking is
-  'The only path into confirmed. Idempotent on (session, player) so a replayed Stripe webhook cannot create a second booking.';
+  'The only path into confirmed. Idempotent on (session, player) so a replayed Stripe webhook cannot create a second booking. Enrolls for the season only when asked — a drop-in does not count toward activation.';
 
 -- =============================================================================
 -- Cancellation and makeup credits
@@ -422,6 +496,7 @@ declare
   v_refund  boolean;
   v_makeup  boolean := false;
   v_credit  uuid;
+  v_remaining integer;
 begin
   select * into v_booking from bookings where id = p_booking_id for update;
   if not found then
@@ -431,6 +506,8 @@ begin
   if v_booking.status in ('canceled','refunded') then
     raise exception 'That booking is already cancelled' using errcode = 'check_violation';
   end if;
+
+  perform assert_household_access(v_booking.household_id);
 
   select * into v_session from sessions where id = v_booking.session_id;
 
@@ -442,8 +519,10 @@ begin
   -- the group is confirmed.
   v_refund := p_by_staff or v_hours >= v_cutoff;
 
+  -- Cancelled either way. Whether money goes back is v_refund, decided above
+  -- and returned to the caller; the booking's own state does not vary.
   update bookings
-  set status = case when v_refund then 'canceled' else 'canceled' end,
+  set status = 'canceled',
       canceled_at = now(),
       canceled_by = auth.uid(),
       cancel_reason = p_reason
@@ -463,15 +542,27 @@ begin
     end if;
   end if;
 
-  -- Free the place and let the ladder fall back to forming if it must.
+  -- Leaving one session is not leaving the group. A family who bought the
+  -- sixteen-session package and cancels week three is still enrolled — and
+  -- still counts toward activation, which matters to the other five families.
+  -- The enrollment ends only when nothing of theirs is left in the group.
   if v_session.group_id is not null then
-    update enrollments
-    set state = 'withdrawn', withdrawn_at = now()
-    where group_id = v_session.group_id and player_id = v_booking.player_id and state = 'active';
+    select count(*) into v_remaining
+    from bookings b
+    join sessions s on s.id = b.session_id
+    where s.group_id = v_session.group_id
+      and b.player_id = v_booking.player_id
+      and b.status not in ('canceled','refunded');
+
+    if v_remaining = 0 then
+      update enrollments
+      set state = 'withdrawn', withdrawn_at = now()
+      where group_id = v_session.group_id and player_id = v_booking.player_id and state = 'active';
+    end if;
   end if;
 
   perform write_audit(
-    case when p_by_staff then 'admin' else 'parent' end,
+    (case when p_by_staff then 'admin' else 'parent' end)::actor_kind,
     auth.uid(), 'booking.canceled', 'bookings', p_booking_id,
     jsonb_build_object('status', v_booking.status),
     jsonb_build_object('refund_due', v_refund, 'makeup_issued', v_makeup, 'reason', p_reason));
@@ -480,6 +571,7 @@ begin
     'refund_due', v_refund,
     'makeup_issued', v_makeup,
     'makeup_credit_id', v_credit,
+    'left_group', v_session.group_id is not null and coalesce(v_remaining, 0) = 0,
     'hours_notice', round(v_hours, 1)
   );
 end;

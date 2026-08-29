@@ -30,6 +30,10 @@ insert into system_settings (key, value, description) values
 ('group_max_players', '6',
  'Hard cap. Beyond this, families join the waitlist.'),
 
+-- ---- Where and when --------------------------------------------------------
+('display_timezone', '"America/New_York"',
+ 'The timezone every date shown to a parent or trainer is rendered in. Sessions are stored as timestamptz; this is how they are read back. Changing it changes what every reminder says.'),
+
 -- ---- Season ----------------------------------------------------------------
 ('season_weeks', '8', 'Length of a standard season.'),
 ('sessions_per_week', '2', 'Meetings per group per week.'),
@@ -61,6 +65,10 @@ insert into system_settings (key, value, description) values
 -- ---- Waitlist --------------------------------------------------------------
 ('waitlist_invite_hours', '24',
  'How long a promoted family has to take a spot before it passes to the next.'),
+
+-- ---- Integrations ----------------------------------------------------------
+('webhook_max_attempts', '5',
+ 'How many times a failing webhook is released back for the provider to retry before we give up and escalate to a person.'),
 
 -- ---- Automation ------------------------------------------------------------
 ('automation_paused', 'false',

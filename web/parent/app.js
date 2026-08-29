@@ -23,7 +23,10 @@ export async function start(root, api) {
   await render();
 }
 
-async function draw(root, api) {
+// pollsLeft is how many more quiet refreshes a pending payment gets before the
+// screen stops waiting and says so. Polling forever would keep a spinner on a
+// screen that is never going to change.
+async function draw(root, api, { pollsLeft = 5 } = {}) {
   mount(root, spinner("Loading your account…"));
 
   const user = await api.auth.current();
@@ -41,14 +44,15 @@ async function draw(root, api) {
 
   let data;
   try {
-    const [players, bookings, credits, payments, waitlists] = await Promise.all([
+    const [players, bookings, credits, payments, waitlists, pending] = await Promise.all([
       api.household(),
       api.bookings(),
       api.credits(),
       api.payments(),
       api.waitlistPlaces(),
+      api.pendingCheckouts(),
     ]);
-    data = { players, bookings, credits, payments, waitlists };
+    data = { players, bookings, credits, payments, waitlists, pending };
   } catch (error) {
     mount(root, errorBox(error, { onRetry: () => draw(root, api) }));
     return;
@@ -71,6 +75,7 @@ async function draw(root, api) {
     el("h1", { text: "Your family" }),
     el("p", { class: "lede", text: data.players.map((p) => p.first_name).join(", ") || "No children on your account yet." }),
 
+    ...pendingCards(data.pending, api, root, pollsLeft),
     nextCard(next),
     ...invitations(data.waitlists, api, root),
     creditsCard(credits),
@@ -90,6 +95,38 @@ async function draw(root, api) {
 
     el("p", { class: "meta" }, [
       el("button", { class: "link", text: "Sign out", onclick: () => api.auth.signOut() }),
+    ]),
+  );
+}
+
+// The seconds between Stripe taking the money and the webhook creating the
+// booking. Short, but a parent who has just been charged and sees nothing on
+// this screen has every reason to pay a second time — so say what is
+// happening, and check again without being asked.
+function pendingCards(pending, api, root, pollsLeft) {
+  if (pending.length === 0) return [];
+
+  const waiting = pollsLeft > 0;
+  if (waiting) {
+    setTimeout(() => draw(root, api, { pollsLeft: pollsLeft - 1 }), 4000);
+  }
+
+  return pending.map((intent) =>
+    el("div", { class: "card pending" }, [
+      badge("Payment received", "nearly"),
+      el("h3", { text: intent.training_groups?.name ?? "Your booking" }),
+      el("p", {
+        class: "meta",
+        text: waiting
+          ? `${money(intent.amount_cents)} paid. We are confirming your place — this takes a moment, and you do not need to pay again.`
+          : `${money(intent.amount_cents)} paid, and we have it. The booking is taking longer than usual to appear — give us a ring and we will sort it out. Please do not pay again.`,
+      }),
+      waiting
+        ? el("div", { class: "loading" }, [
+            el("span", { class: "spinner", "aria-hidden": "true" }),
+            el("span", { text: "Confirming" }),
+          ])
+        : null,
     ]),
   );
 }

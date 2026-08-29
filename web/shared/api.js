@@ -127,6 +127,19 @@ export function createApi(client, { functionsBase, timeZone = "America/New_York"
       return data ?? [];
     },
 
+    // A checkout that has been paid but whose webhook has not landed yet. The
+    // gap is usually a second or two and occasionally longer, and a parent who
+    // has just been charged and sees nothing has every reason to pay again.
+    async pendingCheckouts() {
+      const { data, error } = await client
+        .from("checkout_intents")
+        .select("id, kind, amount_cents, state, created_at, group_id, player_id, training_groups(name)")
+        .in("state", ["submitted"])
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+
     async waitlistPlaces() {
       const { data, error } = await client
         .from("waitlists")

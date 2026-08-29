@@ -44,6 +44,12 @@ export function atLocal(dayOffset, hour, minute = 0) {
   return new Date(guess.getTime() - zoneOffsetMinutes(guess, ZONE) * 60_000).toISOString();
 }
 
+// Plain hours from now, for the cases where what matters is which side of a
+// deadline something falls on rather than which day it lands on.
+export function inHours(offset) {
+  return new Date(Date.now() + offset * 3_600_000).toISOString();
+}
+
 const settings = [
   { key: "display_timezone", value: "America/New_York" },
   { key: "free_cancel_hours", value: 24 },
@@ -56,12 +62,14 @@ export const parentFixtures = {
     players: [
       { id: "p1", first_name: "Tayo", last_name: "Adeyemi", birth_date: "2018-01-04", skill_level: 2, household_id: "h7" },
     ],
+    // Offsets in hours rather than wall-clock days, so both sides of the
+    // 24-hour cancellation line are always represented whatever time of day
+    // the tests or the screenshots run. Deliberately out of order, and the
+    // further one first: the portal must sort rather than take the first row.
     bookings: [
-      // Deliberately out of order, and the further one first: the portal must
-      // sort rather than take the first row.
-      booking("b1", "confirmed", atLocal(3, 17, 30), "s1"),
-      booking("b2", "confirmed", atLocal(1, 17, 30), "s2"),
-      { ...booking("b3", "attended", atLocal(-3, 17, 30), "s0"), credit_id: "c3" },
+      booking("b1", "confirmed", inHours(40), "s1"),
+      booking("b2", "confirmed", inHours(5), "s2"),
+      { ...booking("b3", "attended", inHours(-72), "s0"), credit_id: "c3" },
     ],
     package_credits: [
       { id: "c1", state: "reserved", expires_on: "2099-10-25", origin: "purchase" },
@@ -72,9 +80,10 @@ export const parentFixtures = {
     payments: [
       {
         id: "pay1", amount_cents: 56000, refunded_cents: 0, status: "succeeded",
-        description: "group_package", created_at: atLocal(-3, 9), succeeded_at: atLocal(-3, 9),
+        description: "Season package", created_at: atLocal(-3, 9), succeeded_at: atLocal(-3, 9),
       },
     ],
+    checkout_intents: [],
     waitlists: [
       {
         id: "w1", state: "invited", position: 1,
@@ -142,5 +151,21 @@ export const trainerFixtures = {
       { id: "b4", session_id: "s2", player_id: "p4", status: "confirmed", players: { first_name: "Bao", last_name: "Nguyen" } },
     ],
     attendance: [{ session_id: "s1", player_id: "p1", state: "present", note: "" }],
+  },
+};
+
+// The same family, in the seconds between Stripe taking the money and the
+// webhook creating the booking.
+export const midCheckoutFixtures = {
+  ...parentFixtures,
+  tables: {
+    ...parentFixtures.tables,
+    checkout_intents: [
+      {
+        id: "ci1", kind: "group_package", amount_cents: 56000, state: "submitted",
+        created_at: atLocal(0, 9), group_id: "g1", player_id: "p1",
+        training_groups: { name: "Mon/Wed U9 Foundation" },
+      },
+    ],
   },
 };

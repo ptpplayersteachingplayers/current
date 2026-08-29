@@ -234,16 +234,47 @@ async function drawCheckout(root, api, state, catalog, players) {
       ]),
     ]),
 
-    el("p", {
-      class: "notice",
-      text: "Your place is held for 15 minutes while you pay. If something goes wrong, nothing is charged and the place goes back on the board.",
-    }),
+    holdNotice(checkout, { onExpiry: () => { state.view = "browse"; draw(root, api, state); } }),
 
     errors,
     el("div", { class: "card" }, [paymentSlot, pay]),
   );
 
   await mountStripe({ checkout, paymentSlot, pay, errors, state, api });
+}
+
+// The hold is a real row with a real expiry, and the parent can see it run
+// down. The number is the server's — expire_booking_holds() releases the spot
+// on its own schedule, and a countdown that disagreed with it would be worse
+// than none.
+function holdNotice(checkout, { onExpiry }) {
+  const node = el("p", { class: "notice" });
+
+  const tick = () => {
+    const remaining = new Date(checkout.expires_at) - Date.now();
+
+    if (remaining <= 0) {
+      node.textContent =
+        "Your fifteen minutes are up, so the place has gone back on the board. Nothing was charged. Start again and it is probably still there.";
+      clearInterval(timer);
+      // Back to the groups after a beat, rather than leaving a dead payment
+      // form on the screen.
+      setTimeout(onExpiry, 4000);
+      return;
+    }
+
+    const minutes = Math.floor(remaining / 60_000);
+    const seconds = String(Math.floor((remaining % 60_000) / 1000)).padStart(2, "0");
+
+    node.textContent =
+      `Your place is held for ${minutes}:${seconds} while you pay. ` +
+      "If something goes wrong, nothing is charged and the place goes back on the board.";
+  };
+
+  const timer = setInterval(tick, 1000);
+  tick();
+
+  return node;
 }
 
 // Stripe's own form, in Stripe's own iframe. Card details never touch this

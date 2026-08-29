@@ -26,6 +26,19 @@ await new Promise(r => s.listen(0, r));
 const base = `http://127.0.0.1:${s.address().port}`;
 const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
 
+// Stripe is not reachable from here, so the payment step is served a stand-in
+// that mounts a placeholder where the card form goes. Everything around it —
+// the amount, the hold notice, the button — is the real page.
+const STRIPE_STUB = `
+  window.Stripe = () => ({
+    elements: () => ({ create: () => ({ mount: (node) => {
+      node.textContent = "Card details go here — Stripe's own form, in Stripe's own iframe.";
+      node.style.cssText = "border:1px dashed #cfcac0;border-radius:10px;padding:22px;color:#6b6862;font-size:14px;margin-bottom:14px;text-align:center";
+    } }) }),
+    confirmPayment: async () => ({}),
+  });
+`;
+
 const CATALOG = {
   seasons: [{ id:"se1", name:"Spring 2026", starts_on:"2026-08-31", ends_on:"2026-10-25", weeks:8 }],
   package: { price_cents: 56000, sessions: 16 },
@@ -45,7 +58,13 @@ const CATALOG = {
   ],
 };
 
-async function shot(path, fixtures, file, { route=false, after=null, height=1400 } = {}) {
+const CHECKOUT_RESPONSE = {
+  intent_id: "ci1", amount_cents: 56000, currency: "usd",
+  expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
+  client_secret: "pi_demo_secret", publishable_key: "pk_demo",
+};
+
+async function shot(path, fixtures, file, { route=false, checkout=false, after=null, height=1400 } = {}) {
   const page = await b.newPage({ viewport: { width: 400, height }, deviceScaleFactor: 2 });
   await page.addInitScript(`
     window.__PTP_INSTALL__ = (async () => {
@@ -54,8 +73,12 @@ async function shot(path, fixtures, file, { route=false, after=null, height=1400
       window.__PTP_TEST_CLIENT__ = fakeSupabase(structuredClone(fx.${fixtures}));
     })();
   `);
+  await page.route("https://js.stripe.com/**", r =>
+    r.fulfill({ status:200, contentType:"text/javascript", body: STRIPE_STUB }));
   if (route) await page.route("**/functions/v1/catalog*", r =>
     r.fulfill({ status:200, contentType:"application/json", body: JSON.stringify(CATALOG) }));
+  if (checkout) await page.route("**/functions/v1/checkout", r =>
+    r.fulfill({ status:200, contentType:"application/json", body: JSON.stringify(CHECKOUT_RESPONSE) }));
   await page.goto(`${base}${path}`, { waitUntil: "load" });
   await page.waitForSelector("h1");
   if (after) await after(page);
@@ -74,4 +97,27 @@ await shot("/book/", "parentFixtures", `${OUT}/ptp-book.png`, {
   route: true,
   after: async p => { await p.selectOption("select", { index: 1 }); await p.waitForTimeout(300); },
 });
+
+// --- booking a package, one screen at a time --------------------------------
+
+await shot("/book/", "parentFixtures", `${OUT}/flow-1-browse.png`, {
+  route: true,
+  after: async p => { await p.selectOption("select", { index: 1 }); await p.waitForTimeout(250); },
+});
+
+await shot("/book/", "parentFixtures", `${OUT}/flow-2-pay.png`, {
+  route: true, checkout: true,
+  after: async p => {
+    await p.selectOption("select", { index: 1 });
+    await p.waitForFunction(() =>
+      [...document.querySelectorAll("button")].some(b => b.textContent === "Book the season" && !b.disabled));
+    await p.click("button:text('Book the season')");
+    await p.waitForSelector("#payment-element");
+    await p.waitForTimeout(250);
+  },
+});
+
+await shot("/parent/", "midCheckoutFixtures", `${OUT}/flow-3-confirming.png`);
+await shot("/parent/", "parentFixtures", `${OUT}/flow-4-booked.png`);
+
 await b.close(); s.close();

@@ -29,6 +29,18 @@ repeating its predicate; and a drop-in booking enrolled the player for the
 whole season, so four families dropping in on one Thursday would have committed
 a trainer to sixteen sessions.
 
+## See it happen
+
+```bash
+./trace-booking.sh
+```
+
+One family's purchase run against a real database, printing what changed after
+each step: the price the server decided, the hold, the double tap that makes
+one checkout, the webhook, the sixteen credits, the group flipping to
+confirmed, the replayed event that changes nothing, and another parent being
+refused. `docs/BOOKING-A-PACKAGE.md` is its output.
+
 ## Layout
 
 ```
@@ -43,6 +55,9 @@ migrations/
   0008_messaging.sql           conversations, messages, escalations
   0011_checkout.sql            checkout intents, settlement, refunds, waitlist conversion, attendance
   0012_jobs.sql                reminders, promotions, the tier dispatcher
+docs/
+  PHASE-0-AUDIT.md             what is in the old system and what happens to it
+  BOOKING-A-PACKAGE.md         a real purchase, traced through the database
 functions/
   _shared/                     clients, HTTP, Stripe, signature verification
   catalog checkout stripe-webhook book-with-credit

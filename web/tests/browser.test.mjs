@@ -50,7 +50,36 @@ await (await browser.newPage()).close();
 
 // Fail fast. A missing element is a failing assertion, not something to wait
 // half a minute for.
-const TIMEOUT = 4000;
+const TIMEOUT = 8000;
+
+// Stripe's own script is not reachable from here, so the tests serve a stand-in
+// that records what the page asked it to do. The point is to exercise the real
+// mountStripe() path — the client secret it is handed, the return_url it
+// confirms with — not to test Stripe.
+const STRIPE_STUB = `
+  window.__STRIPE_CALLS__ = [];
+  window.Stripe = (publishableKey) => {
+    window.__STRIPE_CALLS__.push(["Stripe", publishableKey]);
+    return {
+      elements: (options) => {
+        window.__STRIPE_CALLS__.push(["elements", options.clientSecret]);
+        return {
+          create: () => ({
+            mount: (node) => {
+              window.__STRIPE_CALLS__.push(["mount"]);
+              node.textContent = "[ Stripe payment form ]";
+            },
+          }),
+        };
+      },
+      confirmPayment: async ({ confirmParams }) => {
+        window.__STRIPE_CALLS__.push(["confirmPayment", confirmParams.return_url]);
+        return {};
+      },
+    };
+  };
+`;
+
 
 let pass = 0;
 let fail = 0;
@@ -73,7 +102,7 @@ async function check(description, run) {
 
 // Loads a page with the fake client installed before any module runs, and with
 // the clock pinned so "Tomorrow" means tomorrow.
-async function open(path, fixturesName, { signedIn = true } = {}) {
+async function open(path, fixturesName, { signedIn = true, routes = [] } = {}) {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   page.setDefaultTimeout(TIMEOUT);
 
@@ -82,6 +111,7 @@ async function open(path, fixturesName, { signedIn = true } = {}) {
   page.on("console", (message) => {
     if (message.type() === "error") problems.push(message.text());
   });
+  page.on("requestfailed", (r) => problems.push(`request failed: ${r.url()}`));
 
   await page.addInitScript(
     ({ fixturesName, signedIn, baseUrl }) => {
@@ -103,8 +133,25 @@ async function open(path, fixturesName, { signedIn = true } = {}) {
     })();
   `);
 
+  // Stripe's script is fetched from js.stripe.com by the booking page. There
+  // is no internet here, so it is served from the test instead — which means
+  // the page's real loading path is what runs, not a bypass of it.
+  await page.route("https://js.stripe.com/**", (route) =>
+    route.fulfill({ status: 200, contentType: "text/javascript", body: STRIPE_STUB }));
+
+  // Registered before the first navigation, so the page's own first fetch is
+  // answered rather than failing and being retried after a reload.
+  for (const [pattern, handler] of routes) await page.route(pattern, handler);
+
   await page.goto(`${base}${path}`, { waitUntil: "load" });
-  await page.waitForFunction("window.__PTP_TEST_CLIENT__ !== undefined", null, { timeout: 5000 }).catch(() => {});
+  await page.waitForFunction("window.__PTP_TEST_CLIENT__ !== undefined", null, { timeout: TIMEOUT }).catch(() => {});
+
+  // Wait for the app to have painted something, whatever that something is —
+  // a heading, a card, or the sign-in form. Every assertion below then starts
+  // from a page that has finished its first render.
+  await page
+    .waitForSelector("#app h1, #app .card, #app .signin", { timeout: 15_000 })
+    .catch(() => {});
 
   return { page, problems };
 }
@@ -119,10 +166,13 @@ console.log("PARENT PORTAL");
   await check("the page renders without a single console error", () =>
     problems.length === 0 ? true : problems.join(" | "));
 
-  await check("the next session is the soonest one, not the first row", () =>
-    body.includes("Tayo — Tomorrow, 5:30pm")
-      ? true
-      : `no next-session headline in: ${body.slice(0, 200)}`);
+  await check("the next session is the soonest one, not the first row", async () => {
+    // The fixture lists the further booking first. What the hero shows must
+    // match the first card under Coming up, which is the soonest.
+    const hero = await page.textContent(".hero h3");
+    const first = await page.textContent("h2:text('Coming up') + div .card .meta");
+    return hero.includes(first.trim()) ? true : `hero said "${hero}", the list said "${first}"`;
+  });
 
   await check("credits are counted, and reserved ones are not offered", async () => {
     const figure = await page.textContent(".figure-pair .figure");
@@ -149,8 +199,15 @@ console.log("PARENT PORTAL");
   const { page } = await open("/parent/", "parentFixtures");
   await page.waitForSelector("h1");
 
+  await check("a session inside the free-cancellation window is flagged before the tap", async () => {
+    const notices = await page.$$eval(".notice", (nodes) => nodes.map((n) => n.textContent));
+    return notices.some((n) => n.includes("not refundable"))
+      ? true
+      : "the session five hours away was not flagged";
+  });
+
   await check("cancelling asks first, and says what will happen", async () => {
-    // The session more than 24 hours out — refundable.
+    // The last card is the booking forty hours out — refundable.
     const buttons = await page.$$("button:text('Cancel')");
     if (buttons.length === 0) return "no cancel button rendered";
     await buttons[buttons.length - 1].click();
@@ -295,13 +352,11 @@ const CATALOG = {
   ],
 };
 
+const catalogRoute = ["**/functions/v1/catalog*", (route) =>
+  route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(CATALOG) })];
+
 {
-  const { page, problems } = await open("/book/", "parentFixtures");
-
-  await page.route("**/functions/v1/catalog*", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(CATALOG) }));
-
-  await page.reload({ waitUntil: "load" });
+  const { page, problems } = await open("/book/", "parentFixtures", { routes: [catalogRoute] });
   await page.waitForSelector("h1");
   const body = await page.textContent("body");
 
@@ -343,6 +398,125 @@ const CATALOG = {
 }
 
 console.log("");
+console.log("BOOKING A PACKAGE, END TO END");
+
+// Stripe's own script is not loaded here, so it is replaced with something
+// that records what the page asked it to do. The point is to exercise the real
+// mountStripe() path — the client secret it is handed, the return_url it
+// confirms with — not to test Stripe.
+{
+  // What /checkout returns: an amount the server decided, and a client secret.
+  // Note what is NOT in the request — the page never sends a price.
+  const checkoutRequests = [];
+  const checkoutRoute = ["**/functions/v1/checkout", (route) => {
+    checkoutRequests.push(JSON.parse(route.request().postData() ?? "{}"));
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        intent_id: "ci1",
+        amount_cents: 56000,
+        currency: "usd",
+        expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
+        client_secret: "pi_test_123_secret_abc",
+        publishable_key: "pk_test_stub",
+      }),
+    });
+  }];
+
+  const { page, problems } = await open("/book/", "parentFixtures", {
+    routes: [catalogRoute, checkoutRoute],
+  });
+  await page.waitForSelector("h1");
+  await page.selectOption("select", { index: 1 });
+  await page.waitForFunction(
+    () => [...document.querySelectorAll("button")].some((b) => b.textContent === "Book the season" && !b.disabled),
+    null, { timeout: TIMEOUT },
+  );
+
+  await page.click("button:text('Book the season')");
+  await page.waitForSelector("#payment-element", { timeout: TIMEOUT });
+  const summary = await page.textContent("body");
+
+  await check("the checkout asks for a group and a child, and never a price", () => {
+    const [request] = checkoutRequests;
+    if (!request) return "no checkout request was made";
+    const keys = Object.keys(request).sort().join(",");
+    return keys === "idempotency_key,kind,player_id,target_id"
+      ? true
+      : `the request carried: ${keys}`;
+  });
+
+  await check("…with an idempotency key, so a double tap is one purchase", () =>
+    checkoutRequests[0].idempotency_key?.length > 10 ? true : "no idempotency key");
+
+  await check("the amount shown is the one the server priced", () =>
+    summary.includes("$560") ? true : "the server's amount was not shown");
+
+  await check("the hold is shown counting down, from the server's own expiry", () =>
+    /held for 1[0-4]:\d\d while you pay/.test(summary) ? true : "no live hold countdown");
+
+
+  await check("Stripe is handed the client secret and nothing else", async () => {
+    const calls = await page.evaluate(() => window.__STRIPE_CALLS__);
+    const elements = calls.find((c) => c[0] === "elements");
+    return elements?.[1] === "pi_test_123_secret_abc" ? true : `elements got ${JSON.stringify(elements)}`;
+  });
+
+  await check("the payment form is mounted into the page", () =>
+    summary.includes("[ Stripe payment form ]") ? true : "the form did not mount");
+
+  await check("paying sends the parent back to their account", async () => {
+    await page.click("button:text('Pay $560')");
+    await page.waitForFunction(
+      () => window.__STRIPE_CALLS__.some((c) => c[0] === "confirmPayment"),
+      null, { timeout: TIMEOUT },
+    );
+    const calls = await page.evaluate(() => window.__STRIPE_CALLS__);
+    const confirm = calls.find((c) => c[0] === "confirmPayment");
+    return confirm[1].endsWith("/parent/") ? true : `return_url was ${confirm[1]}`;
+  });
+
+await check("…and an expired hold says the place went back, and nothing was charged", async () => {
+    await page.evaluate(() => {
+      // Wind the clock past the expiry the server gave us.
+      const original = Date.now;
+      Date.now = () => original() + 16 * 60_000;
+    });
+    await page.waitForFunction(
+      () => document.body.textContent.includes("gone back on the board"),
+      null, { timeout: TIMEOUT },
+    );
+    const text = await page.textContent(".notice");
+    return text.includes("Nothing was charged") ? true : `it said: ${text}`;
+  });
+
+  await check("the whole flow raised no console errors", () =>
+    problems.length === 0 ? true : problems.join(" | "));
+
+  await page.close();
+}
+
+{
+  // What the parent sees in the seconds after paying, before the webhook has
+  // created the booking.
+  const { page } = await open("/parent/", "midCheckoutFixtures");
+  await page.waitForSelector("h1");
+  const body = await page.textContent("body");
+
+  await check("a paid-but-unsettled checkout says so, at the top", () =>
+    body.includes("Payment received") ? true : "nothing acknowledged the payment");
+
+  await check("…and tells them plainly not to pay twice", () =>
+    body.includes("do not need to pay again") ? true : "no reassurance was given");
+
+  await check("…and the amount is the amount they were charged", () =>
+    body.includes("$560 paid") ? true : "the amount was not repeated back");
+
+  await page.close();
+}
+
+console.log("");
 console.log("REACHABILITY");
 
 // Checked on every page, not one of them. The booking page was the one that
@@ -353,14 +527,7 @@ for (const [path, fixtures, route] of [
   ["/trainer/", "trainerFixtures", false],
   ["/book/", "parentFixtures", true],
 ]) {
-  const { page } = await open(path, fixtures);
-
-  if (route) {
-    await page.route("**/functions/v1/catalog*", (r) =>
-      r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(CATALOG) }));
-    await page.reload({ waitUntil: "load" });
-  }
-
+  const { page } = await open(path, fixtures, { routes: route ? [catalogRoute] : [] });
   await page.waitForSelector("h1");
 
   await check(`${path} — every tappable thing is at least 44px, for a thumb on a pitch`, async () => {

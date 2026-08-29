@@ -28,6 +28,16 @@ Deno.serve(async (req: Request) => {
     .select("id, name, starts_on, ends_on, weeks, credits_expire_on")
     .order("starts_on");
 
+  // The package price comes from here rather than being written into the
+  // booking page. A page that hardcodes a price will one day quote a number
+  // the checkout then refuses to charge.
+  const { data: settingRows } = await db
+    .from("system_settings")
+    .select("key, value")
+    .in("key", ["group_package_price_cents", "group_package_sessions"]);
+
+  const settings = Object.fromEntries((settingRows ?? []).map((row) => [row.key, Number(row.value)]));
+
   if (seasonError) {
     console.error("catalog seasons", seasonError);
     return json({ error: "Could not load the catalogue" }, 500, origin);
@@ -77,6 +87,10 @@ Deno.serve(async (req: Request) => {
   return json(
     {
       seasons,
+      package: {
+        price_cents: settings.group_package_price_cents ?? null,
+        sessions: settings.group_package_sessions ?? null,
+      },
       groups: (groups ?? []).map((group) => {
         const counts = byGroup.get(group.id) as
           | { paid: number; held: number; total: number; capacity: number }

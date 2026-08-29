@@ -352,8 +352,17 @@ begin
   insert into payments (household_id, amount_cents, status, stripe_payment_intent_id,
                         stripe_charge_id, description, succeeded_at, metadata)
   values (v_intent.household_id, p_amount_cents, 'succeeded', p_stripe_payment_intent_id,
-          p_charge_id, v_intent.kind, now(),
-          jsonb_build_object('checkout_intent_id', v_intent.id))
+          p_charge_id,
+          -- Written for the person who will read it on a receipt, not for the
+          -- code. 'group_package' is a value, not a description.
+          case v_intent.kind
+            when 'group_package' then 'Season package'
+            when 'group_dropin'  then 'Single session'
+            when 'private'       then 'Private session'
+            else v_intent.kind
+          end,
+          now(),
+          jsonb_build_object('checkout_intent_id', v_intent.id, 'kind', v_intent.kind))
   on conflict (stripe_payment_intent_id) do nothing
   returning * into v_payment;
 

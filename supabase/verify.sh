@@ -12,6 +12,7 @@ set -uo pipefail
 
 DB="${DB:-ptp_verify}"
 PSQL_ARGS="-h ${PGHOST:-/tmp/pgtest/sock} -p ${PGPORT:-5433} -U ${PGUSER:-postgres}"
+cd "$(dirname "$0")"
 Q() { psql $PSQL_ARGS -d "$DB" -tA -q -c "$1" 2>&1; }
 
 # Run as a signed-in parent or trainer. SET LOCAL only takes effect inside a

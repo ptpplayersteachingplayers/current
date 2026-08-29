@@ -1,4 +1,89 @@
-# PTP Soccer - Mobile App
+# PTP — Players Teaching Players
+
+Year-round group and private soccer training: the platform, the portals, and
+what is left of the WordPress site it is replacing.
+
+```bash
+./test.sh        # 180 assertions: the database, the webhook, the portals
+```
+
+## What is here
+
+```
+supabase/        the platform — schema, rules, RLS, edge functions
+web/             the portals — booking, parent, trainer
+wordpress/       the current live site, frozen for new logic
+src/, App.tsx    the Expo mobile app, still pointing at WordPress
+```
+
+### `supabase/` — where the rules live
+
+Thirty-four tables, seventy-two policies, and every business rule expressed as
+a database function rather than as application code. Capacity, activation,
+credits, cancellation, trainer blocks and pay are settled inside the
+transaction that writes the row, because two parents can tap Book in the same
+second and that race can only be settled in one place.
+
+Eight edge functions sit on top, thin on purpose. The Stripe webhook — not the
+browser's success page — is what turns a payment into a place.
+
+See `supabase/README.md`.
+
+### `web/` — three screens, no build step
+
+The booking page, the family's account and the trainer's day. Plain modules and
+one stylesheet, so they load on a phone at the side of a pitch. They hold no
+business rules: every price and capacity decision arrives from the server.
+
+See `web/README.md`.
+
+### `wordpress/` — still live, deliberately still
+
+The private-training system that is running today. It keeps running until the
+new platform is proven. **No new business logic goes in here** — no scheduling,
+packages, capacity, credits or automation. See `wordpress/DECOMMISSION.md` for
+what comes off and in what order, and `supabase/docs/PHASE-0-AUDIT.md` for what
+was found in it.
+
+### The mobile app
+
+Expo and React Native, and still talking to the WordPress REST API. Repointing
+it at Supabase is not done. Until it is, it is a fourth client of the old
+system rather than a client of the new one, and it is listed here so that is
+not a surprise.
+
+## Where things stand
+
+| | Built | Executed |
+|---|---|---|
+| Schema, RLS, business rules | yes | 71 assertions, PostgreSQL 16 |
+| Stripe signature verification | yes | 12 assertions, the real source under Node |
+| Edge function handlers | yes | **no** — no Deno runtime or Stripe account here |
+| Portal logic | yes | 61 assertions |
+| Portals, rendered | yes | 36 assertions, real Chromium |
+| Payment step | yes | **no** — needs a real `client_secret` |
+| Quo, HubSpot, the AI agent | no | — |
+
+The two "no"s are the honest limit of what has been proven. Everything else in
+that table has been run.
+
+## Running the tests
+
+```bash
+./test.sh
+```
+
+Needs PostgreSQL 16 (with `pgcrypto`, `citext`, `btree_gist`) and Node 22.6 or
+newer. `npm i playwright` adds the browser tests; without it they are skipped
+loudly rather than silently.
+
+```bash
+node web/tests/screenshots.mjs ./shots     # look at the portals, don't just assert
+```
+
+---
+
+# Appendix: the Expo mobile app
 
 A production-ready **Expo (React Native)** mobile application for **Players Teaching Players (PTP) Soccer Camps**, built on top of an existing WordPress backend.
 

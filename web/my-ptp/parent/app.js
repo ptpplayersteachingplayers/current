@@ -10,14 +10,17 @@
 // the server decides again when the tap comes.
 // =============================================================================
 
-import { canCancel, creditSummary, nextSession } from "../shared/derive.js";
-import { dateAndTime, money, whenLabel } from "../shared/format.js";
-import { signInView } from "../shared/signin.js";
+import { canCancel, creditSummary, nextSession } from "/shared/derive.js";
+import { dateAndTime, money, whenLabel } from "/shared/format.js";
+import { boot } from "/shared/boot.js";
+import { signInView } from "/shared/signin.js";
 import {
   badge, busy, confirmDialog, el, empty, errorBox, mount, spinner, toast,
-} from "../shared/ui.js";
+} from "/shared/ui.js";
 
-export async function start(root, api) {
+export async function start(root) {
+  const api = await boot();
+
   const render = () => draw(root, api);
   api.auth.onChange(render);
   await render();
@@ -174,7 +177,7 @@ function invitations(waitlists, api, root) {
               waitlistId: w.id,
               idempotencyKey: `waitlist-${w.id}`,
             });
-            location.href = `../book/?checkout=${checkout_intent.id}`;
+            location.href = `/group-training/?checkout=${checkout_intent.id}`;
           } catch (error) {
             toast(error.message, "error");
           }

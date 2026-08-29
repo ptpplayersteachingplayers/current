@@ -162,9 +162,10 @@ export function meetingLabel(meetingTimes) {
   const sorted = [...meetingTimes].sort((a, b) => a.weekday - b.weekday);
   const days = sorted.map((m) => WEEKDAYS[m.weekday].slice(0, 3)).join(" & ");
 
-  // The clock times on a meeting row are local wall-clock strings, not
-  // instants, so they are shown as given rather than converted.
-  const at = sorted[0]?.starts_at ? ` at ${trimClock(sorted[0].starts_at)}` : "";
+  // starts_time, not starts_at. The column is a wall-clock time at the field,
+  // not an instant, which is why it is shown as given rather than converted —
+  // and why it is named differently from every other time in the schema.
+  const at = sorted[0]?.starts_time ? ` at ${trimClock(sorted[0].starts_time)}` : "";
   return `${days}${at}`;
 }
 
@@ -283,4 +284,86 @@ export function rosterProgress(entries) {
     complete: entries.length > 0 && marked === entries.length,
     label: `${marked} of ${entries.length} marked`,
   };
+}
+
+// -----------------------------------------------------------------------------
+// Camps
+// -----------------------------------------------------------------------------
+
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+// A camp week reads as "Mon 21 – Fri 25 Jun" rather than two full dates, which
+// is how a parent scanning eight weeks in a list actually reads them.
+export function campDateRange(startsOn, endsOn) {
+  const [ys, ms, ds] = startsOn.split("-").map(Number);
+  const [ye, me, de] = endsOn.split("-").map(Number);
+
+  const start = new Date(Date.UTC(ys, ms - 1, ds));
+  const end = new Date(Date.UTC(ye, me - 1, de));
+  const day = (d) => ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getUTCDay()];
+
+  if (ms === me && ys === ye) {
+    return `${day(start)} ${ds} – ${day(end)} ${de} ${MONTHS[me - 1]}`;
+  }
+  return `${day(start)} ${ds} ${MONTHS[ms - 1]} – ${day(end)} ${de} ${MONTHS[me - 1]}`;
+}
+
+// Clock strings from the camp row, shown as given. They are wall-clock times
+// at the field, not instants, so converting them would be wrong.
+export function clockRange(from, to) {
+  const trim = (clock) => {
+    const [h, m] = String(clock).split(":");
+    const hour = Number(h);
+    const suffix = hour >= 12 ? "pm" : "am";
+    const twelve = hour % 12 === 0 ? 12 : hour % 12;
+    return m === "00" ? `${twelve}${suffix}` : `${twelve}:${m}${suffix}`;
+  };
+  return `${trim(from)}–${trim(to)}`;
+}
+
+export function campSummary(camp) {
+  const prices = [
+    camp.offers_full_day ? camp.full_day_price_cents : null,
+    camp.offers_half_day ? camp.half_day_price_cents : null,
+  ].filter((p) => typeof p === "number");
+
+  const left = camp.spots_left ?? (camp.occupancy
+    ? Math.max(0, camp.occupancy.capacity - camp.occupancy.total)
+    : null);
+
+  return {
+    ...camp,
+    date_range: campDateRange(camp.starts_on, camp.ends_on),
+    daily_hours: clockRange(camp.daily_starts_at, camp.daily_ends_at),
+    from_price_cents: prices.length ? Math.min(...prices) : null,
+    spots_left: left,
+    // What a parent can do with this camp right now, which is not the same as
+    // its status: an early-access camp is not "open" and not "full" either.
+    action: campAction(camp, left),
+  };
+}
+
+export function campAction(camp, spotsLeft) {
+  if (camp.status === "early_access") return "interest";
+  if (camp.status === "full" || camp.status === "waitlist" || spotsLeft === 0) return "waitlist";
+  if (camp.status === "registration_open" || camp.status === "limited") return "register";
+  return "none";
+}
+
+export function campEligibility(camp, player) {
+  if (!player || !player.birth_date) return { eligible: true, reason: null };
+
+  const [y, m, d] = player.birth_date.split("-").map(Number);
+  const [cy, cm, cd] = camp.starts_on.split("-").map(Number);
+
+  let age = cy - y;
+  if (cm < m || (cm === m && cd < d)) age -= 1;
+
+  if (age < camp.min_age) {
+    return { eligible: false, age, reason: `This camp starts at ${camp.min_age}. ${player.first_name} is ${age}.` };
+  }
+  if (age > camp.max_age) {
+    return { eligible: false, age, reason: `This camp runs to ${camp.max_age}. ${player.first_name} is ${age}.` };
+  }
+  return { eligible: true, age, reason: null };
 }

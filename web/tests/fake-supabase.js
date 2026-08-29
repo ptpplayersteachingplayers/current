@@ -28,15 +28,32 @@ export function fakeSupabase(fixtures) {
       eq(column, value) { filters.push((r) => r[column] === value); return builder; },
       gte(column, value) { filters.push((r) => r[column] >= value); return builder; },
       lte(column, value) { filters.push((r) => r[column] <= value); return builder; },
+      // Applies the filters. The first version patched every row in the
+      // table, which meant an update with the wrong id looked like a success.
       update(patch) {
-        for (const row of fixtures.tables[table] ?? []) Object.assign(row, patch);
+        for (const row of rows().filter((r) => filters.every((f) => f(r)))) {
+          const live = (fixtures.tables[table] ?? []).find((r) => r === row || r.id === row.id);
+          if (live) Object.assign(live, patch);
+        }
         return builder;
       },
       then(resolve) {
         const filtered = rows().filter((row) => filters.every((f) => f(row)));
         return result(filtered).then(resolve);
       },
+      // PostgREST errors when .single() matches other than one row, and a
+      // page's error branch should be exercised rather than assumed.
       single() {
+        const filtered = rows().filter((row) => filters.every((f) => f(row)));
+        if (filtered.length !== 1) {
+          return result(null, {
+            code: "PGRST116",
+            message: `Expected one row, found ${filtered.length}`,
+          });
+        }
+        return result(filtered[0]);
+      },
+      maybeSingle() {
         const filtered = rows().filter((row) => filters.every((f) => f(row)));
         return result(filtered[0] ?? null);
       },
@@ -47,7 +64,20 @@ export function fakeSupabase(fixtures) {
 
   return {
     from,
-    rpc: (name, args) => result(fixtures.rpc?.[name]?.(args) ?? null),
+    // An RPC the fixture does not define is a mistake in the page or in the
+    // fixture, and either way the test should see it. Returning null quietly
+    // made a call to a function that does not exist invisible.
+    rpc: (name, args) => {
+      const handler = fixtures.rpc?.[name];
+      if (!handler) {
+        return Promise.resolve({
+          data: null,
+          error: { code: "42883", message: `No stub for rpc ${name}` },
+        });
+      }
+      const value = handler(args);
+      return Promise.resolve({ data: value, error: null, single: () => Promise.resolve({ data: value, error: null }) });
+    },
     auth: {
       getUser: () => result(session ? { user: session.user } : { user: null }),
       getSession: () => result({ session }),

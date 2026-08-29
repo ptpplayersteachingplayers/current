@@ -22,10 +22,33 @@ AS() { # AS <auth.uid> <sql>
   psql $PSQL_ARGS -d "$DB" -tA -q 2>&1 <<EOF | grep -v '^$'
 begin;
 set local role authenticated;
-set local request.jwt.claim.sub = '$1';
+set local request.jwt.claims = '{"role":"authenticated","sub":"$1"}';
 $2
 commit;
 EOF
+}
+
+# An anonymous visitor. Supabase's publishable key is itself a token with
+# role=anon, so a real anonymous request carries claims — and a guard that
+# treats "no signed-in user" as "must be the system" waves it straight through.
+# That was the largest hole in this schema, so it gets its own helper.
+ANON() { # ANON <sql>
+  psql $PSQL_ARGS -d "$DB" -tA -q 2>&1 <<EOF | grep -v '^$'
+begin;
+set local role anon;
+set local request.jwt.claims = '{"role":"anon"}';
+$1
+commit;
+EOF
+}
+
+assert_anon() { # assert_anon <sql> <description> <expected-substring>
+  local got; got=$(ANON "$1")
+  if echo "$got" | grep -qi -- "$3"; then
+    printf "  ok   %s\n" "$2"; pass=$((pass+1))
+  else
+    printf "  FAIL %s\n         got: %s\n" "$2" "$(echo "$got" | head -1)"; fail=$((fail+1))
+  fi
 }
 
 pass=0; fail=0
@@ -54,7 +77,10 @@ psql $PSQL_ARGS -q -c "drop database if exists $DB;" -c "create database $DB;" >
 psql $PSQL_ARGS -d "$DB" -q >/dev/null 2>&1 <<'SQL'
 create schema if not exists auth;
 create or replace function auth.uid() returns uuid language sql stable as $$
-  select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+  select coalesce(
+    nullif(current_setting('request.jwt.claim.sub', true), ''),
+    nullif(coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'sub', '')
+  )::uuid $$;
 create or replace function auth.jwt() returns jsonb language sql stable as $$
   select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb) $$;
 do $$ begin
@@ -350,6 +376,178 @@ assert "select id from join_camp_waitlist('$FULLCAMP','$TAYO');" \
        "…but the waitlist takes them"                                                                                       "-"
 assert "select id from begin_camp_registration('$NORRIS','$TAYO','half_day','camp-3','{}'::uuid[],'$DETAILS'::jsonb);" \
        "a player already registered cannot register again"                                                                  "already registered"
+echo
+
+echo "THE ANONYMOUS HOLE — every one of these worked before 0017"
+BOOKING_ANY=$(Q "select id from bookings where status='confirmed' limit 1;")
+CREDIT_ANY=$(Q "select id from package_credits limit 1;")
+SESSION_ANY=$(Q "select id from sessions where status='scheduled' limit 1;")
+PLAYER_ANY=$(Q "select id from players limit 1;")
+SHIFT_ANY=$(Q "select id from trainer_shifts limit 1;")
+
+assert_anon "select settle_checkout('pi_invented', 56000, 'ch_invented');" \
+       "a visitor cannot settle a payment that never happened"                                                              "permission denied"
+assert_anon "select attach_payment_intent('$BOOKING_ANY','pi_invented');" \
+       "…nor bind a checkout to a Stripe id of their choosing"                                                              "permission denied"
+assert_anon "select confirm_booking('$SESSION_ANY','$PLAYER_ANY',null,'$CREDIT_ANY',0);" \
+       "…nor confirm a booking against someone else's credit"                                                               "permission denied"
+assert_anon "select issue_makeup_credit((select household_id from bookings limit 1),(select id from seasons limit 1),'free money');" \
+       "…nor mint a credit"                                                                                                 "permission denied"
+assert_anon "select record_trainer_hours('$SHIFT_ANY');" \
+       "…nor book payroll"                                                                                                  "permission denied"
+assert_anon "select override_confirm_block('$SHIFT_ANY','because I said so');" \
+       "…nor commit a trainer against the block rule"                                                                       "permission denied"
+assert_anon "select write_audit('admin',null,'booking.confirmed','bookings','$BOOKING_ANY');" \
+       "…nor forge a line in the audit log"                                                                                 "permission denied"
+assert_anon "select claim_webhook_event('stripe','evt_not_sent_yet','x','{}');" \
+       "…nor claim a Stripe event id before Stripe sends it"                                                                "permission denied"
+assert_anon "select run_scheduled_job('record_hours','manual');" \
+       "…nor run a scheduled job"                                                                                           "permission denied"
+assert_anon "select cancel_booking('$BOOKING_ANY', true, 'vandalism');" \
+       "…nor cancel a stranger's booking"                                                                                   "permission denied"
+assert_anon "select begin_checkout('group_package','$PLAYER_ANY',(select id from training_groups where slug='u9-foundation'),'anon-1');" \
+       "…nor start a checkout for somebody else's child"                                                                    "permission denied"
+assert_anon "select camps_near('19401', 25);" \
+       "but the public catalogue still answers"                                                                             "-"
+assert_anon "select paid from group_occupancy((select id from training_groups where slug='u9-foundation'));" \
+       "…and so does how full a group is"                                                                                   "^[0-9]"
+echo
+
+echo "A SIGNED-IN PARENT IS NOT STAFF EITHER"
+assert_as "$MAI" "select settle_checkout('pi_invented_2', 56000, 'ch_x');" \
+       "a parent cannot settle their own payment"                                                                           "permission denied"
+assert_as "$MAI" "select record_trainer_hours('$SHIFT_ANY');" \
+       "…nor book a trainer's hours"                                                                                        "permission denied"
+assert_as "$MAI" "select override_confirm_block('$SHIFT_ANY','pay me');" \
+       "…nor override a block"                                                                                              "permission denied"
+assert_as "$MAI" "select issue_makeup_credit((select household_id from bookings limit 1),(select id from seasons limit 1),'free money');" \
+       "…nor issue themselves a credit"                                                                                     "permission denied"
+assert_as "$MAI" "select write_audit('admin',null,'x','bookings',null);" \
+       "…nor write to the audit log"                                                                                        "permission denied"
+echo
+
+echo "WHAT THE AUDIT FOUND — each of these was reproducible before 0018"
+GROUP_A2=$(Q "select id from training_groups where slug='u12-advanced';")
+
+# A parent asking to be treated as staff.
+LATE=$(Q "select b.id from bookings b join sessions s on s.id=b.session_id
+          where b.status='confirmed' order by s.starts_at limit 1;")
+Q "update sessions set starts_at = now() + interval '2 hours', ends_at = now() + interval '3 hours'
+   where id = (select session_id from bookings where id='$LATE');" >/dev/null
+LATE_HH=$(Q "select c.auth_user_id from bookings b join contacts c on c.household_id=b.household_id
+             where b.id='$LATE' and c.is_primary limit 1;")
+assert_as "$LATE_HH" "select (cancel_booking('$LATE', true, 'refund me')::jsonb) ->> 'refund_due';" \
+       "a parent cannot claim a staff refund by passing a flag"                                                             "^false$"
+
+# The refund path, which had never once executed.
+PAY_ANY=$(Q "select id from payments where status='succeeded' limit 1;")
+assert "select amount_cents from record_refund('$PAY_ANY', 1000, 'rf_test_1', 'goodwill');" \
+       "recording a refund works at all — it used to raise on every call"                                                   "^1000$"
+assert "select status::text from payments where id='$PAY_ANY';" \
+       "…and the payment reads as partially refunded"                                                                       "partially_refunded"
+assert "select amount_cents from record_refund('$PAY_ANY', 1000, 'rf_test_1', 'goodwill');" \
+       "…and recording the same Stripe refund twice returns the first"                                                      "^1000$"
+assert "select count(*) from refunds where stripe_refund_id='rf_test_1';" "…one row"                                        "^1$"
+
+# Credits belonging to somebody else.
+FOREIGN_CREDIT=$(Q "select id from package_credits where state='available'
+                    and household_id <> (select household_id from players where first_name='Bao') limit 1;")
+BAO=$(Q "select id from players where first_name='Bao';")
+FREE_SESSION=$(Q "select s.id from sessions s join training_groups g on g.id=s.group_id
+                  where g.slug='u12-advanced' and s.starts_at > now() order by s.starts_at limit 1;")
+assert "select id from confirm_booking('$FREE_SESSION','$BAO',null,'$FOREIGN_CREDIT',0);" \
+       "a credit from another household cannot pay for a booking"                                                           "belongs to another household"
+
+# One credit, two sessions.
+OWN_CREDIT=$(Q "select id from package_credits where state='available' limit 1;")
+OWNER=$(Q "select p.id from players p where p.household_id=(select household_id from package_credits where id='$OWN_CREDIT') limit 1;")
+S1=$(Q "select s.id from sessions s where s.starts_at > now() order by s.starts_at limit 1;")
+S2=$(Q "select s.id from sessions s where s.starts_at > now() order by s.starts_at offset 1 limit 1;")
+Q "select confirm_booking('$S1','$OWNER',null,'$OWN_CREDIT',0);" >/dev/null
+assert "select id from confirm_booking('$S2','$OWNER',null,'$OWN_CREDIT',0);" \
+       "one credit cannot pay for two sessions"                                                                             "already been used"
+
+# Settling something that should not settle.
+Q "select begin_checkout('group_dropin','$TAYO','$FREE_SESSION','late-1');" >/dev/null 2>&1
+Q "select begin_checkout('group_dropin','66666666-0000-0000-0000-000000000008',
+     (select s.id from sessions s join training_groups g on g.id=s.group_id
+      where g.slug='u10-development' and s.starts_at>now() order by s.starts_at limit 1),'late-2');" >/dev/null
+Q "select attach_payment_intent((select id from checkout_intents where idempotency_key='late-2'),'pi_late');" >/dev/null
+Q "update checkout_intents set state='expired' where idempotency_key='late-2';" >/dev/null
+assert "select settle_checkout('pi_late', 4000, 'ch_late')::text;" \
+       "a payment landing after the hold expired is held, not fulfilled"                                                    "intent_expired"
+
+Q "select begin_checkout('group_dropin','66666666-0000-0000-0000-000000000008',
+     (select s.id from sessions s join training_groups g on g.id=s.group_id
+      where g.slug='u10-development' and s.starts_at>now() order by s.starts_at offset 1 limit 1),'under-1');" >/dev/null
+Q "select attach_payment_intent((select id from checkout_intents where idempotency_key='under-1'),'pi_under');" >/dev/null
+assert "select settle_checkout('pi_under', 1, 'ch_under')::text;" \
+       "one cent does not buy a \$40 session"                                                                               "underpaid"
+assert "select count(*) from payments where stripe_payment_intent_id='pi_under';" \
+       "…and no payment row is written for it"                                                                              "^0$"
+echo
+
+echo "BLOCKS — a day is not a block"
+Q "delete from trainer_shifts;" >/dev/null
+Q "update private_slots set status='available', shift_id=null;" >/dev/null
+SAM=$(Q "select id from trainers where slug='sam-whitfield';")
+Q "insert into private_slots (trainer_id, location_id, starts_at, ends_at, status)
+   select '$SAM', location_id, starts_at + interval '11 hours', ends_at + interval '11 hours', 'booked'
+   from private_slots order by starts_at limit 1;" >/dev/null
+Q "update private_slots set status='booked' where starts_at::time='09:00';" >/dev/null
+FIRST_SLOT=$(Q "select id from private_slots where starts_at::time='09:00' limit 1;")
+assert "select evaluate_trainer_block('$FIRST_SLOT')::text;" \
+       "two sessions eleven hours apart are two trips, not one block"                                                       "awaiting_second_booking"
+assert "select count(*) from trainer_shifts;" "…and no twelve-hour shift is created"                                        "^0$"
+assert "select adjoins(now(), now() + interval '1 hour', now() + interval '61 minutes', now() + interval '2 hours', true, 90, 30);" \
+       "a one-minute gap across town does not adjoin — there is no time to drive"                                           "^f$"
+assert "select adjoins(now(), now() + interval '1 hour', now() + interval '90 minutes', now() + interval '2 hours', true, 90, 30);" \
+       "…half an hour later does"                                                                                           "^t$"
+assert "select adjoins(now(), now() + interval '1 hour', now() + interval '5 hours', now() + interval '6 hours', false, 90, 30);" \
+       "…and four hours later, anywhere, does not"                                                                          "^f$"
+echo
+
+echo "CREDITS AND WAITLISTS"
+HOLD_SESSION=$(Q "select s.id from sessions s join training_groups g on g.id=s.group_id
+                  where g.slug='u12-advanced' and s.starts_at>now() order by s.starts_at limit 1;")
+CREDIT_OWNER=$(Q "select p.id from players p join enrollments e on e.player_id=p.id
+                  join training_groups g on g.id=e.group_id where g.slug='u12-advanced' limit 1;")
+BEFORE=$(Q "select count(*) from package_credits where state='available';")
+Q "select create_booking_hold('$HOLD_SESSION','$CREDIT_OWNER',true);" >/dev/null 2>&1
+Q "select create_booking_hold('$HOLD_SESSION','$CREDIT_OWNER',true);" >/dev/null 2>&1
+Q "select create_booking_hold('$HOLD_SESSION','$CREDIT_OWNER',true);" >/dev/null 2>&1
+AFTER=$(Q "select count(*) from package_credits where state='available';")
+assert "select $BEFORE - $AFTER;" "three taps of book-with-credit reserve one credit, not three"                            "^[01]$"
+assert "select release_stranded_credits() >= 0;" "…and a stranded reservation can be recovered at all"                      "^t$"
+
+Q "update waitlists set state='waiting', invited_at=null, invite_expires_at=null;" >/dev/null
+Q "insert into waitlists (group_id, player_id, household_id, position)
+   select '$GROUP_A2', id, household_id, 90 from players where first_name in ('Mateo','Tunde')
+   on conflict do nothing;" >/dev/null
+Q "update enrollments set state='withdrawn' where group_id='$GROUP_A2' and state='active'
+   and player_id=(select player_id from enrollments where group_id='$GROUP_A2' and state='active' limit 1);" >/dev/null
+Q "select promote_waitlist('$GROUP_A2');" >/dev/null
+Q "select promote_waitlist('$GROUP_A2');" >/dev/null
+Q "select promote_waitlist('$GROUP_A2');" >/dev/null
+assert "select count(*) from waitlists where group_id='$GROUP_A2' and state='invited';" \
+       "one open place is offered to one family, not to everyone on the list"                                               "^1$"
+echo
+
+echo "JOBS AND SETTINGS"
+Q "select claim_webhook_event('stripe','evt_stuck','x','{}');" >/dev/null
+Q "update webhook_events set claimed_at = now() - interval '2 hours' where external_id='evt_stuck';" >/dev/null
+assert "select reap_stale_webhook_claims();" "an event claimed by a handler that died is released for retry"                "^1$"
+assert "select claim_webhook_event('stripe','evt_stuck','x','{}');" "…and Stripe's next delivery is taken"                  "^t$"
+assert "select generate_group_sessions((select id from training_groups where slug='u12-advanced'));" \
+       "re-running season generation reports the truth: nothing new"                                                        "^0$"
+assert "insert into training_groups (season_id, name, slug, status, location_id, trainer_id)
+        select season_id, 'Sneaked in', 'sneaked-in', 'confirmed', location_id, trainer_id
+        from training_groups where slug='u13-pending';" \
+       "a group cannot be inserted straight into confirmed on an unverified field"                                          "not verified and permitted"
+assert_anon "select value from system_settings where key='free_cancel_hours';" \
+       "a visitor can read the cancellation window they are shown"                                                          "^24$"
+assert_anon "select count(*) from system_settings where key='automation_paused';" \
+       "…and nothing operational"                                                                                           "^0$"
 echo
 
 echo "============================================================"

@@ -21,8 +21,9 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Use POST" }, 405, origin);
 
   let body: {
-    action?: "join" | "accept" | "decline";
+    action?: "join" | "join_camp" | "accept" | "decline";
     group_id?: string;
+    camp_id?: string;
     player_id?: string;
     waitlist_id?: string;
     idempotency_key?: string;
@@ -43,6 +44,19 @@ Deno.serve(async (req: Request) => {
 
       const { data, error } = await db
         .rpc("join_waitlist", { p_group_id: body.group_id, p_player_id: body.player_id })
+        .single();
+
+      if (error) return fromDatabaseError(error, origin);
+      return json({ waitlist: data }, 200, origin);
+    }
+
+    case "join_camp": {
+      if (!body.camp_id || !body.player_id) {
+        return json({ error: "camp_id and player_id are required" }, 400, origin);
+      }
+
+      const { data, error } = await db
+        .rpc("join_camp_waitlist", { p_camp_id: body.camp_id, p_player_id: body.player_id })
         .single();
 
       if (error) return fromDatabaseError(error, origin);
@@ -77,6 +91,6 @@ Deno.serve(async (req: Request) => {
     }
 
     default:
-      return json({ error: "action must be join, accept or decline" }, 400, origin);
+      return json({ error: "action must be join, join_camp, accept or decline" }, 400, origin);
   }
 });

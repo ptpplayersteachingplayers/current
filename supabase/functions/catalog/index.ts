@@ -49,7 +49,7 @@ Deno.serve(async (req: Request) => {
       "id, season_id, name, slug, status, min_age, max_age, min_skill, max_skill, " +
         "min_players, target_players, max_players, dropin_price_cents, " +
         "locations(name, city), trainers(display_name, slug), " +
-        "group_meeting_times(weekday, starts_at, ends_at)",
+        "group_meeting_times(weekday, starts_time, duration_minutes)",
     )
     .order("name");
 

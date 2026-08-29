@@ -8,8 +8,8 @@
 // =============================================================================
 
 import {
-  canCancel, creditSummary, dayPlan, groupCard, meetingLabel,
-  nextSession, roster, rosterProgress,
+  campAction, campDateRange, campEligibility, campSummary, canCancel, clockRange,
+  creditSummary, dayPlan, groupCard, meetingLabel, nextSession, roster, rosterProgress,
 } from "../shared/derive.js";
 import { dayKey, hours, money, relativeDay, time, whenLabel } from "../shared/format.js";
 
@@ -170,8 +170,8 @@ const group = {
   locations: { name: "Northside Turf" },
   trainers: { display_name: "Dani Okoro" },
   group_meeting_times: [
-    { weekday: 3, starts_at: "17:30:00" },
-    { weekday: 1, starts_at: "17:30:00" },
+    { weekday: 3, starts_time: "17:30:00", duration_minutes: 60 },
+    { weekday: 1, starts_time: "17:30:00", duration_minutes: 60 },
   ],
 };
 
@@ -289,6 +289,63 @@ check(
   ])).complete,
   true,
 );
+
+console.log("");
+
+console.log("CAMPS");
+const camp = {
+  id: "c1", slug: "norristown-week-1", name: "Norristown Summer Camp — Week 1",
+  city: "Norristown", state: "PA", field_name: "Northside Turf",
+  starts_on: "2027-06-21", ends_on: "2027-06-25",
+  daily_starts_at: "09:00:00", daily_ends_at: "15:00:00",
+  min_age: 6, max_age: 14,
+  full_day_price_cents: 39500, half_day_price_cents: 27500,
+  offers_full_day: true, offers_half_day: true,
+  status: "registration_open",
+  occupancy: { paid: 6, held: 0, total: 6, capacity: 60 },
+};
+
+check("a camp week reads as a week, not two dates", campDateRange("2027-06-21", "2027-06-25"), "Mon 21 – Fri 25 Jun");
+check("…and spans a month boundary properly", campDateRange("2027-06-28", "2027-07-02"), "Mon 28 Jun – Fri 2 Jul");
+check("field hours are shown as given, not converted", clockRange("09:00:00", "15:00:00"), "9am–3pm");
+check("the headline price is the cheapest option offered", campSummary(camp).from_price_cents, 27500);
+check(
+  "…and a full-day-only camp quotes the full day",
+  campSummary({ ...camp, offers_half_day: false }).from_price_cents,
+  39500,
+);
+check("places left is capacity minus everything taken", campSummary(camp).spots_left, 54);
+check("a held place counts as taken", campSummary({ ...camp, occupancy: { paid: 6, held: 2, total: 8, capacity: 60 } }).spots_left, 52);
+check("an open camp offers registration", campSummary(camp).action, "register");
+check("a full camp offers the waitlist", campSummary({ ...camp, status: "full" }).action, "waitlist");
+check(
+  "…and so does one with zero places, whatever its status says",
+  campSummary({ ...camp, occupancy: { paid: 60, held: 0, total: 60, capacity: 60 } }).action,
+  "waitlist",
+);
+check("an early-access camp collects interest, not money", campSummary({ ...camp, status: "early_access" }).action, "interest");
+
+check(
+  "age is measured on the first day of camp, not today",
+  campEligibility(camp, { first_name: "Tayo", birth_date: "2021-01-04" }).age,
+  6,
+);
+check(
+  "a child who is too young is told which camp is wrong, and by how much",
+  campEligibility(camp, { first_name: "Nia", birth_date: "2022-08-01" }).reason,
+  "This camp starts at 6. Nia is 4.",
+);
+check(
+  "a child who turns 15 the week after is still eligible",
+  campEligibility(camp, { first_name: "Ada", birth_date: "2012-06-28" }).eligible,
+  true,
+);
+check(
+  "…and one who turned 15 the week before is not",
+  campEligibility(camp, { first_name: "Ada", birth_date: "2012-06-14" }).eligible,
+  false,
+);
+check("a player with no birthday recorded is not blocked", campEligibility(camp, { first_name: "X" }).eligible, true);
 
 console.log("");
 console.log("============================================================");

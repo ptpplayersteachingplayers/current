@@ -144,7 +144,8 @@ export const trainerFixtures = {
       },
     ],
     trainer_hours: [
-      { id: "th1", shift_id: "sh0", hours: 2, amount_cents: 8000, worked_on: "2026-08-27", paid_out_at: null },
+      { id: "th1", shift_id: "sh0", minutes: 120, amount_cents: 8000, worked_on: "2026-08-27",
+        paid_at: null, status: "pending" },
     ],
     bookings: [
       { id: "b1", session_id: "s1", player_id: "p2", status: "confirmed", players: { first_name: "Zara", last_name: "Okafor" } },

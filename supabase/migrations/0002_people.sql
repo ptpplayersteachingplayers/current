@@ -139,6 +139,9 @@ create table trainers (
   display_name       text not null,
   slug               text not null unique,
   bio                text not null default '',
+  -- Real photography, not a stock image. Empty until someone uploads one, and
+  -- the coach card renders without it rather than showing a placeholder face.
+  photo_url          text not null default '',
   phone              text,
   email              citext,
 

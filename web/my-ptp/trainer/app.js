@@ -12,12 +12,13 @@
 // touch it.
 // =============================================================================
 
-import { blockWarning, dayPlan, roster, rosterProgress } from "../shared/derive.js";
-import { date, dayKey, money, plural, time } from "../shared/format.js";
-import { signInView } from "../shared/signin.js";
+import { blockWarning, dayPlan, roster, rosterProgress } from "/shared/derive.js";
+import { date, dayKey, money, plural, time } from "/shared/format.js";
+import { boot } from "/shared/boot.js";
+import { signInView } from "/shared/signin.js";
 import {
   badge, busy, el, empty, errorBox, mount, spinner, toast,
-} from "../shared/ui.js";
+} from "/shared/ui.js";
 
 const MARKS = [
   { state: "present", label: "In" },
@@ -26,7 +27,9 @@ const MARKS = [
   { state: "excused", label: "Exc" },
 ];
 
-export async function start(root, api) {
+export async function start(root) {
+  const api = await boot();
+
   const state = { view: "day", day: dayKey(new Date(), api.timeZone), sessionId: null };
 
   const render = () => draw(root, api, state);
@@ -277,7 +280,7 @@ function hoursTable(hours, api) {
   if (hours.length === 0) return empty("No hours recorded yet.");
 
   const total = hours.reduce((sum, h) => sum + h.amount_cents, 0);
-  const unpaid = hours.filter((h) => !h.paid_out_at).reduce((sum, h) => sum + h.amount_cents, 0);
+  const unpaid = hours.filter((h) => !h.paid_at).reduce((sum, h) => sum + h.amount_cents, 0);
 
   return el("div", { class: "card" }, [
     el("div", { class: "card-row" }, [
@@ -294,9 +297,9 @@ function hoursTable(hours, api) {
     ...hours.slice(0, 10).map((h) =>
       el("div", { class: "register-row" }, [
         el("span", { class: "register-name", text: h.worked_on }),
-        el("span", { class: "meta", text: `${h.hours} h` }),
+        el("span", { class: "meta", text: `${(h.minutes / 60).toFixed(h.minutes % 60 === 0 ? 0 : 1)} h` }),
         el("span", { text: money(h.amount_cents) }),
-        h.paid_out_at ? badge("paid", "running") : badge("due", "neutral"),
+        h.paid_at ? badge("paid", "running") : badge("due", "neutral"),
       ]),
     ),
   ]);

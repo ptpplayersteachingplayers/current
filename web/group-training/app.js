@@ -10,16 +10,22 @@
 // this page says so rather than leaving them guessing.
 // =============================================================================
 
-import { groupCard } from "../shared/derive.js";
-import { money } from "../shared/format.js";
-import { checkoutKey, clearCheckoutKey } from "../shared/api.js";
-import { signInView } from "../shared/signin.js";
+import { groupCard } from "/shared/derive.js";
+import { money } from "/shared/format.js";
+import { checkoutKey, clearCheckoutKey } from "/shared/api.js";
+import { boot } from "/shared/boot.js";
+import { config } from "/config.js";
+import { signInView } from "/shared/signin.js";
 import {
   badge, busy, el, empty, errorBox, field, mount, spinner, toast,
-} from "../shared/ui.js";
+} from "/shared/ui.js";
 
-export async function start(root, api, { stripePublishableKey = null } = {}) {
-  const state = { view: "browse", groupId: null, playerId: null, stripePublishableKey };
+export async function start(root) {
+  const api = await boot();
+  const state = {
+    view: "browse", groupId: null, playerId: null,
+    stripePublishableKey: config.stripePublishableKey,
+  };
 
   const render = () => draw(root, api, state);
   api.auth.onChange(render);
@@ -302,7 +308,7 @@ async function mountStripe({ checkout, paymentSlot, pay, errors, state, api }) {
 
       const { error } = await stripe.confirmPayment({
         elements,
-        confirmParams: { return_url: new URL("../parent/", location.href).href },
+        confirmParams: { return_url: new URL("/my-ptp/parent/", location.href).href },
       });
 
       // Only reached when the payment did not proceed; a success navigates

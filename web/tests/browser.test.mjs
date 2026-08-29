@@ -84,6 +84,10 @@ const STRIPE_STUB = `
 let pass = 0;
 let fail = 0;
 
+// A page that does not load is a failing assertion, not a crash. The suite
+// used to die on the first navigation timeout, printing no summary and
+// silently skipping everything after it — which is how a whole restructure
+// went green-looking while three routes were 404.
 async function check(description, run) {
   try {
     const outcome = await run();
@@ -139,6 +143,14 @@ async function open(path, fixturesName, { signedIn = true, routes = [] } = {}) {
   await page.route("https://js.stripe.com/**", (route) =>
     route.fulfill({ status: 200, contentType: "text/javascript", body: STRIPE_STUB }));
 
+  // No internet here, and a font request that hangs stops the page firing
+  // load. Served empty: the fallback stacks in the stylesheet are what the
+  // tests measure against anyway.
+  await page.route("https://fonts.googleapis.com/**", (route) =>
+    route.fulfill({ status: 200, contentType: "text/css", body: "" }));
+  await page.route("https://fonts.gstatic.com/**", (route) =>
+    route.fulfill({ status: 200, contentType: "font/woff2", body: "" }));
+
   // Registered before the first navigation, so the page's own first fetch is
   // answered rather than failing and being retried after a reload.
   for (const [pattern, handler] of routes) await page.route(pattern, handler);
@@ -159,7 +171,7 @@ async function open(path, fixturesName, { signedIn = true, routes = [] } = {}) {
 console.log("PARENT PORTAL");
 
 {
-  const { page, problems } = await open("/parent/", "parentFixtures");
+  const { page, problems } = await open("/my-ptp/parent/", "parentFixtures");
   await page.waitForSelector("h1");
   const body = await page.textContent("body");
 
@@ -196,7 +208,7 @@ console.log("PARENT PORTAL");
 }
 
 {
-  const { page } = await open("/parent/", "parentFixtures");
+  const { page } = await open("/my-ptp/parent/", "parentFixtures");
   await page.waitForSelector("h1");
 
   await check("a session inside the free-cancellation window is flagged before the tap", async () => {
@@ -226,7 +238,7 @@ console.log("PARENT PORTAL");
 }
 
 {
-  const { page } = await open("/parent/", "parentFixtures", { signedIn: false });
+  const { page } = await open("/my-ptp/parent/", "parentFixtures", { signedIn: false });
   await page.waitForSelector(".signin");
 
   await check("a signed-out visitor gets a sign-in form and no family data", async () => {
@@ -241,7 +253,7 @@ console.log("");
 console.log("TRAINER PORTAL");
 
 {
-  const { page, problems } = await open("/trainer/", "trainerFixtures");
+  const { page, problems } = await open("/my-ptp/trainer/", "trainerFixtures");
   await page.waitForSelector("h1");
   const body = await page.textContent("body");
 
@@ -277,7 +289,7 @@ console.log("TRAINER PORTAL");
 }
 
 {
-  const { page } = await open("/trainer/", "trainerFixtures");
+  const { page } = await open("/my-ptp/trainer/", "trainerFixtures");
   await page.waitForSelector("h1");
 
   await check("opening a register shows the roster, cancelled players excluded", async () => {
@@ -327,8 +339,12 @@ console.log("");
 console.log("BOOKING PAGE");
 
 // The catalogue arrives from an edge function over fetch, so it is stubbed at
-// the network rather than in the client — which also proves the page reads the
-// response shape /catalog actually returns.
+// the network. Note what this can and cannot prove: it exercises how the page
+// reads the response, not whether /catalog can produce it. An audit found the
+// endpoint querying a column that does not exist, and this stub could not
+// catch it because it encoded the same wrong name. The column names below are
+// now the ones in 0003, and the shape is checked against the schema in
+// verify.sh rather than asserted here.
 const CATALOG = {
   seasons: [{ id: "se1", name: "Spring 2026", starts_on: "2026-08-31", ends_on: "2026-10-25", weeks: 8 }],
   package: { price_cents: 56000, sessions: 16 },
@@ -339,7 +355,8 @@ const CATALOG = {
       occupancy: { paid: 3, held: 0, total: 3, capacity: 6 },
       eligible: true,
       locations: { name: "Northside Turf" }, trainers: { display_name: "Dani Okoro" },
-      group_meeting_times: [{ weekday: 1, starts_at: "17:30:00" }, { weekday: 3, starts_at: "17:30:00" }],
+      group_meeting_times: [{ weekday: 1, starts_time: "17:30:00", duration_minutes: 60 },
+                            { weekday: 3, starts_time: "17:30:00", duration_minutes: 60 }],
     },
     {
       id: "g2", name: "Tue/Thu U12 Advanced", status: "full",
@@ -347,7 +364,7 @@ const CATALOG = {
       occupancy: { paid: 6, held: 0, total: 6, capacity: 6 },
       eligible: false,
       locations: { name: "Northside Turf" }, trainers: { display_name: "Marcus Bell" },
-      group_meeting_times: [{ weekday: 2, starts_at: "18:00:00" }],
+      group_meeting_times: [{ weekday: 2, starts_time: "18:00:00", duration_minutes: 60 }],
     },
   ],
 };
@@ -356,7 +373,7 @@ const catalogRoute = ["**/functions/v1/catalog*", (route) =>
   route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(CATALOG) })];
 
 {
-  const { page, problems } = await open("/book/", "parentFixtures", { routes: [catalogRoute] });
+  const { page, problems } = await open("/group-training/", "parentFixtures", { routes: [catalogRoute] });
   await page.waitForSelector("h1");
   const body = await page.textContent("body");
 
@@ -424,7 +441,7 @@ console.log("BOOKING A PACKAGE, END TO END");
     });
   }];
 
-  const { page, problems } = await open("/book/", "parentFixtures", {
+  const { page, problems } = await open("/group-training/", "parentFixtures", {
     routes: [catalogRoute, checkoutRoute],
   });
   await page.waitForSelector("h1");
@@ -474,7 +491,7 @@ console.log("BOOKING A PACKAGE, END TO END");
     );
     const calls = await page.evaluate(() => window.__STRIPE_CALLS__);
     const confirm = calls.find((c) => c[0] === "confirmPayment");
-    return confirm[1].endsWith("/parent/") ? true : `return_url was ${confirm[1]}`;
+    return confirm[1].endsWith("/my-ptp/parent/") ? true : `return_url was ${confirm[1]}`;
   });
 
 await check("…and an expired hold says the place went back, and nothing was charged", async () => {
@@ -500,7 +517,7 @@ await check("…and an expired hold says the place went back, and nothing was ch
 {
   // What the parent sees in the seconds after paying, before the webhook has
   // created the booking.
-  const { page } = await open("/parent/", "midCheckoutFixtures");
+  const { page } = await open("/my-ptp/parent/", "midCheckoutFixtures");
   await page.waitForSelector("h1");
   const body = await page.textContent("body");
 
@@ -523,9 +540,9 @@ console.log("REACHABILITY");
 // overflowed, and a check that only ran against the trainer portal said
 // nothing about it.
 for (const [path, fixtures, route] of [
-  ["/parent/", "parentFixtures", false],
-  ["/trainer/", "trainerFixtures", false],
-  ["/book/", "parentFixtures", true],
+  ["/my-ptp/parent/", "parentFixtures", false],
+  ["/my-ptp/trainer/", "trainerFixtures", false],
+  ["/group-training/", "parentFixtures", true],
 ]) {
   const { page } = await open(path, fixtures, { routes: route ? [catalogRoute] : [] });
   await page.waitForSelector("h1");

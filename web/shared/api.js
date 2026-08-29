@@ -72,6 +72,154 @@ export function createApi(client, { functionsBase, timeZone = "America/New_York"
       return await callFunction(`catalog${query}`, null, { method: "GET" });
     },
 
+    // Camps are read straight through PostgREST rather than an edge function:
+    // the RLS policy already says exactly which ones are public, so a second
+    // filter in a function would be a second place to get it wrong.
+    async camps({ state = null, limit = 24 } = {}) {
+      let query = client
+        .from("camps")
+        .select(
+          "id, name, slug, city, state, region, postal_code, field_name, address_line, " +
+            "starts_on, ends_on, daily_starts_at, daily_ends_at, half_day_ends_at, " +
+            "min_age, max_age, full_day_price_cents, half_day_price_cents, " +
+            "offers_full_day, offers_half_day, capacity, status, featured_image_url",
+        )
+        .in("status", ["registration_open", "limited", "full", "waitlist", "early_access"])
+        .order("starts_on")
+        .limit(limit);
+
+      if (state) query = query.eq("state", state);
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const camps = await withOccupancy(data ?? []);
+      return { camps };
+    },
+
+    // The ZIP search. camps_near() is the same function behind the state and
+    // city pages, so all three agree about what is on sale.
+    async campsNear({ zip = null, radius = 40, state = null, city = null,
+                      age = null, dayOption = null } = {}) {
+      const { data: rows, error } = await client.rpc("camps_near", {
+        p_postal_code: zip,
+        p_radius_miles: radius,
+        p_state: state,
+        p_city: city,
+        p_age: age,
+        p_day_option: dayOption,
+      });
+      if (error) throw error;
+
+      if ((rows ?? []).length === 0) return { camps: [] };
+
+      const { data: camps, error: campError } = await client
+        .from("camps")
+        .select(
+          "id, name, slug, city, state, region, postal_code, field_name, address_line, " +
+            "starts_on, ends_on, daily_starts_at, daily_ends_at, half_day_ends_at, " +
+            "min_age, max_age, full_day_price_cents, half_day_price_cents, " +
+            "offers_full_day, offers_half_day, capacity, status, featured_image_url",
+        )
+        .in("id", rows.map((r) => r.camp_id));
+      if (campError) throw campError;
+
+      const distance = new Map(rows.map((r) => [r.camp_id, r]));
+
+      const ordered = rows
+        .map((r) => {
+          const camp = (camps ?? []).find((c) => c.id === r.camp_id);
+          return camp && { ...camp, distance_miles: r.distance_miles, spots_left: r.spots_left };
+        })
+        .filter(Boolean);
+
+      return { camps: ordered, distances: distance };
+    },
+
+    async camp(slug) {
+      const { data: camp, error } = await client
+        .from("camps")
+        .select("*")
+        .eq("slug", slug)
+        .single();
+      if (error) throw error;
+
+      const [days, staffing, addons, occupancy] = await Promise.all([
+        client.from("camp_sessions").select("id, session_date, starts_at, ends_at, status")
+          .eq("camp_id", camp.id).order("session_date"),
+        client.from("camp_staffing").select("role, is_featured, trainers(display_name, slug, bio)")
+          .eq("camp_id", camp.id).eq("status", "accepted"),
+        client.from("camp_addons").select("id, code, name, description, price_cents")
+          .eq("camp_id", camp.id).eq("active", true),
+        client.rpc("camp_occupancy", { p_camp_id: camp.id }).single(),
+      ]);
+
+      return {
+        camp,
+        days: days.data ?? [],
+        staffing: staffing.data ?? [],
+        addons: addons.data ?? [],
+        occupancy: occupancy.data ?? null,
+      };
+    },
+
+    // Is the person signed in a coach? The trainers table is readable to
+    // anonymous visitors as a directory, so this asks specifically for the row
+    // that belongs to this sign-in.
+    async myTrainerProfile() {
+      const { data: userData } = await client.auth.getUser();
+      if (!userData?.user) return null;
+
+      const { data, error } = await client
+        .from("trainers")
+        .select("id, display_name, slug, status")
+        .eq("auth_user_id", userData.user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data ?? null;
+    },
+
+    // The public private-training board. The block rule is applied in the
+    // database, so this cannot show a slot that would send a coach across town
+    // for one isolated hour.
+    async privateSlots({ from = null, to = null } = {}) {
+      const { data, error } = await client.rpc("offerable_private_slots_all", {
+        p_from: from,
+        p_to: to,
+      });
+      if (error) throw error;
+      return data ?? [];
+    },
+
+    async trainers() {
+      const { data, error } = await client
+        .from("trainers")
+        .select("id, display_name, slug, bio, photo_url")
+        .eq("status", "active")
+        .order("display_name");
+      if (error) throw error;
+      return data ?? [];
+    },
+
+    // Early access. Anyone may add themselves; nobody may read the list back,
+    // which is what the insert-only policy on camp_interest says.
+    async registerInterest(payload) {
+      const { error } = await client.from("camp_interest").insert(payload);
+      if (error) throw error;
+    },
+
+    async myCampRegistrations() {
+      const { data, error } = await client
+        .from("camp_registrations")
+        .select("id, status, day_option, price_cents, created_at, " +
+                "players(first_name, last_name), " +
+                "camps(name, slug, city, state, field_name, starts_on, ends_on, daily_starts_at, daily_ends_at)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+
     // ---- a parent's own family -------------------------------------------
     async household() {
       const { data, error } = await client
@@ -178,7 +326,7 @@ export function createApi(client, { functionsBase, timeZone = "America/New_York"
     async myHours(fromIso) {
       const { data, error } = await client
         .from("trainer_hours")
-        .select("id, shift_id, hours, amount_cents, worked_on, paid_out_at")
+        .select("id, shift_id, minutes, amount_cents, worked_on, paid_at, status")
         .gte("worked_on", fromIso)
         .order("worked_on", { ascending: false });
       if (error) throw error;
@@ -242,8 +390,37 @@ export function createApi(client, { functionsBase, timeZone = "America/New_York"
 
       recordAttendance: ({ sessionId, entries }) =>
         callFunction("attendance", { session_id: sessionId, entries }),
+
+      startCampRegistration: ({ campId, playerId, dayOption, addonIds, details, idempotencyKey }) =>
+        callFunction("camp-checkout", {
+          camp_id: campId,
+          player_id: playerId,
+          day_option: dayOption,
+          addon_ids: addonIds ?? [],
+          details,
+          idempotency_key: idempotencyKey,
+        }),
+
+      joinCampWaitlist: ({ campId, playerId }) =>
+        callFunction("waitlist", { action: "join_camp", camp_id: campId, player_id: playerId }),
     },
   };
+
+  // Occupancy is a function rather than a column because it counts live holds
+  // as well as paid places. One call per camp, in parallel.
+  async function withOccupancy(camps) {
+    const counts = await Promise.all(
+      camps.map((camp) => client.rpc("camp_occupancy", { p_camp_id: camp.id }).single()),
+    );
+
+    return camps.map((camp, index) => ({
+      ...camp,
+      occupancy: counts[index]?.data ?? null,
+      spots_left: counts[index]?.data
+        ? Math.max(0, counts[index].data.capacity - counts[index].data.total)
+        : null,
+    }));
+  }
 }
 
 // An idempotency key that survives a reload, so the parent who refreshes

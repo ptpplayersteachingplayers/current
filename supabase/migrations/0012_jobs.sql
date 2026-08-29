@@ -255,6 +255,64 @@ end;
 $$;
 
 -- =============================================================================
+-- Camps
+-- =============================================================================
+
+create or replace function promote_all_camp_waitlists()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_camp uuid;
+  v_n integer := 0;
+begin
+  for v_camp in
+    select distinct w.camp_id
+    from waitlists w
+    join camps c on c.id = w.camp_id
+    where w.state = 'waiting'
+      and c.status in ('registration_open','limited','full','waitlist')
+  loop
+    if promote_waitlist_for_camp(v_camp) is not null then
+      v_n := v_n + 1;
+    end if;
+  end loop;
+
+  return v_n;
+end;
+$$;
+
+-- A camp that has finished should stop appearing in the finder. The old site
+-- kept selling places at camps that had already happened, which is the single
+-- most embarrassing bug a registration system can have.
+create or replace function archive_past_camps()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_n integer;
+begin
+  with done as (
+    update camps
+    set status = 'archived'
+    where status in ('completed','full','limited','registration_open','waitlist')
+      and ends_on < current_date - interval '7 days'
+    returning id
+  )
+  select count(*) into v_n from done;
+
+  update camp_sessions set status = 'completed'
+  where status = 'scheduled' and ends_at < now();
+
+  return v_n;
+end;
+$$;
+
+-- =============================================================================
 -- The dispatcher
 -- =============================================================================
 -- One entry point. The edge function calls this with a tier; nothing about
@@ -284,14 +342,17 @@ begin
   begin
     case p_job_key
       when 'expire_holds'        then v_items := expire_booking_holds();
+      when 'expire_camp_holds'   then v_items := expire_camp_holds();
       when 'expire_checkouts'    then v_items := expire_checkout_intents();
       when 'lapse_invites'       then v_items := lapse_waitlist_invites();
       when 'promote_waitlists'   then v_items := promote_all_waitlists();
+      when 'promote_camp_waitlists' then v_items := promote_all_camp_waitlists();
       when 'send_reminders'      then v_items := send_session_reminders();
       when 'expire_credits'      then v_items := expire_package_credits();
       when 'complete_sessions'   then v_items := complete_past_sessions();
       when 'record_hours'        then v_items := record_completed_shift_hours();
       when 'flag_near_threshold' then v_items := flag_groups_near_threshold();
+      when 'archive_past_camps'  then v_items := archive_past_camps();
       else
         raise exception 'Unknown job %', p_job_key using errcode = 'check_violation';
     end case;
@@ -326,9 +387,10 @@ language sql
 immutable
 as $$
   select case p_tier
-    when 'five_minute' then array['expire_holds','expire_checkouts']
-    when 'hourly'      then array['lapse_invites','promote_waitlists','send_reminders','complete_sessions']
-    when 'daily'       then array['expire_credits','record_hours','flag_near_threshold']
+    when 'five_minute' then array['expire_holds','expire_camp_holds','expire_checkouts']
+    when 'hourly'      then array['lapse_invites','promote_waitlists','promote_camp_waitlists',
+                                  'send_reminders','complete_sessions']
+    when 'daily'       then array['expire_credits','record_hours','flag_near_threshold','archive_past_camps']
     when 'weekly'      then array[]::text[]
     else array[]::text[]
   end;

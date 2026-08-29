@@ -282,6 +282,76 @@ assert "select release_webhook_event('stripe','e2','still broken')::text;" \
 assert "select claim_webhook_event('stripe','e2','t','{}')::text;" "…and is not handed out again"                          "^false$"
 echo
 
+echo "CAMPS"
+assert "select status::text from camps where slug='norristown-week-1';" \
+       "a camp with room is open"                                                                                          "^registration_open$"
+assert "select status::text from camps where slug='cherry-hill-week-2';" \
+       "six places left reads as limited, not open"                                                                        "^limited$"
+assert "select status::text from camps where slug='doylestown-week-1';" \
+       "a camp at capacity is full"                                                                                        "^full$"
+assert "update camps set status='registration_open' where slug='princeton-week-3';" \
+       "a camp cannot open on an unapproved field"                                                                          "field is not approved"
+Q "update camps set field_approved = true where slug='princeton-week-3';" >/dev/null
+assert "update camps set status='registration_open' where slug='princeton-week-3';" \
+       "…nor without a certificate of insurance"                                                                            "certificate of insurance"
+Q "update camps set insurance_status='received', full_day_price_cents=0 where slug='princeton-week-3';" >/dev/null
+assert "update camps set status='registration_open' where slug='princeton-week-3';" \
+       "…nor at \$0, which is how the old site sold free weeks"                                                             "cannot open at .0"
+assert "select count(*) from camp_sessions where camp_id=(select id from camps where slug='norristown-week-1');" \
+       "a Monday-to-Friday camp generates five days"                                                                       "^5$"
+echo
+
+echo "CAMP FINDER"
+assert "select c.slug from camps_near('19401', 25) n join camps c on c.id=n.camp_id order by n.distance_miles limit 1;" \
+       "the nearest camp to 19401 is the one in Norristown"                                                                 "^norristown-week-1$"
+assert "select round(n.distance_miles) from camps_near('19401', 60) n join camps c on c.id=n.camp_id where c.slug='cherry-hill-week-2';" \
+       "Cherry Hill is about twenty-one miles from Norristown"                                                              "^21$"
+assert "select count(*) from camps_near('19401', 10);" \
+       "a ten-mile radius excludes the New Jersey camp"                                                                     "^1$"
+assert "select count(*) from camps_near('19401', 60, 'NJ');" \
+       "filtering by state works"                                                                                           "^1$"
+assert "select count(*) from camps_near(null, 40, null, null, 4::smallint);" \
+       "a four-year-old is too young for any of them"                                                                       "^0$"
+assert "select count(*) from camps_near('19401', 60, null, null, null, 'half_day');" \
+       "…and only two camps offer half days"                                                                                "^2$"
+assert "select count(*) from camps_near('19401', 60) n join camps c on c.id=n.camp_id where c.status='full';" \
+       "a full camp still appears, so the family can join the waitlist"                                                     "^1$"
+assert "select count(*) from camps_near('19401', 60) n join camps c on c.id=n.camp_id where c.status='draft';" \
+       "a draft camp appears nowhere"                                                                                       "^0$"
+echo
+
+echo "CAMP REGISTRATION"
+NORRIS=$(Q "select id from camps where slug='norristown-week-1';")
+FULLCAMP=$(Q "select id from camps where slug='doylestown-week-1';")
+assert "select id from begin_camp_registration('$NORRIS','$TAYO','full_day','camp-1');" \
+       "a registration without the paperwork is refused before Stripe"                                                      "Still needed"
+DETAILS='{"emergency_contact_name":"Simi Adeyemi","emergency_contact_phone":"+12155550208","waiver_agreed":"true","media_release_agreed":"true","conduct_agreed":"true","refund_policy_agreed":"true","medical_auth_agreed":"true"}'
+assert "select amount_cents from begin_camp_registration('$NORRIS','$TAYO','full_day','camp-1','{}'::uuid[],'$DETAILS'::jsonb);" \
+       "a full-day week is priced from the camp record"                                                                     "^39500$"
+assert "select held from camp_occupancy('$NORRIS');" "…and holds a place while they pay"                                    "^1$"
+ADDON=$(Q "select id from camp_addons where camp_id='$NORRIS' and code='before_care';")
+assert "select price_camp('$NORRIS','full_day', array['$ADDON']::uuid[]);" \
+       "before care is priced from its own row, not from the request"                                                       "^44500$"
+Q "select attach_payment_intent((select id from checkout_intents where idempotency_key='camp-1'),'pi_camp_1');" >/dev/null
+assert "select settle_checkout('pi_camp_1',39500,'ch_camp_1')::text;" \
+       "paying registers the player"                                                                                        '"sessions_booked": 1'
+assert "select status from camp_registrations where camp_id='$NORRIS' and player_id='$TAYO';" \
+       "…confirmed, with the waiver timestamped"                                                                            "^confirmed$"
+assert "select waiver_agreed_at is not null from camp_registrations where camp_id='$NORRIS' and player_id='$TAYO';" \
+       "…and the agreements recorded with a time, not a tick"                                                               "^t$"
+assert "select held from camp_occupancy('$NORRIS');" "…and the hold released"                                               "^0$"
+assert "select settle_checkout('pi_camp_1',39500,'ch_camp_1')::text;" \
+       "a replayed camp webhook registers nobody twice"                                                                     '"idempotent": true'
+assert "select count(*) from camp_registrations where camp_id='$NORRIS' and player_id='$TAYO';" \
+       "…one registration"                                                                                                  "^1$"
+assert "select id from begin_camp_registration('$FULLCAMP','$TAYO','full_day','camp-2','{}'::uuid[],'$DETAILS'::jsonb);" \
+       "a full camp refuses a registration before Stripe"                                                                   "camp is full"
+assert "select id from join_camp_waitlist('$FULLCAMP','$TAYO');" \
+       "…but the waitlist takes them"                                                                                       "-"
+assert "select id from begin_camp_registration('$NORRIS','$TAYO','half_day','camp-3','{}'::uuid[],'$DETAILS'::jsonb);" \
+       "a player already registered cannot register again"                                                                  "already registered"
+echo
+
 echo "============================================================"
 printf "  %d passed, %d failed\n" "$pass" "$fail"
 echo "============================================================"

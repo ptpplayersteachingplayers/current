@@ -62,6 +62,16 @@ insert into system_settings (key, value, description) values
 ('allow_seed_private_slots', 'true',
  'Offer the first weekend private of a day as block_pending, knowing a second booking may make it viable. Turn off to only ever show slots that already join work.'),
 
+-- ---- Camps -----------------------------------------------------------------
+('camp_refund_days', '14',
+ 'Cancel this many days before a camp starts for a full refund. Inside it, the place is held and the staffing is already paid for.'),
+('camp_low_availability', '10',
+ 'Places remaining at which a camp is shown as limited availability. Per camp on its own row; this is the fallback.'),
+('camp_full_day_price_cents', '39500',
+ 'Default full-day week. Every camp carries its own price; this is what a new camp starts at.'),
+('camp_half_day_price_cents', '27500',
+ 'Default half-day week.'),
+
 -- ---- Waitlist --------------------------------------------------------------
 ('waitlist_invite_hours', '24',
  'How long a promoted family has to take a spot before it passes to the next.'),

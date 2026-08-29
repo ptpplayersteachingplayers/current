@@ -270,7 +270,10 @@ comment on column enrollments.is_paid is
 
 create table waitlists (
   id            uuid primary key default gen_random_uuid(),
-  group_id      uuid not null references training_groups (id) on delete cascade,
+  -- One waitlist table for both things a family can queue for. Two tables
+  -- would mean two promotion functions, two expiry jobs and two places for the
+  -- rule about invitation windows to drift apart. camp_id is added in 0013.
+  group_id      uuid references training_groups (id) on delete cascade,
   player_id     uuid not null references players (id) on delete cascade,
   household_id  uuid not null references households (id) on delete cascade,
 
@@ -288,7 +291,7 @@ create table waitlists (
 
 create unique index waitlists_one_per_player
   on waitlists (group_id, player_id)
-  where state in ('waiting','invited');
+  where state in ('waiting','invited') and group_id is not null;
 
 create index waitlists_order_idx on waitlists (group_id, position) where state = 'waiting';
 

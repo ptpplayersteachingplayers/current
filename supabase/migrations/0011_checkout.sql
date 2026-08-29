@@ -23,7 +23,7 @@ create table checkout_intents (
   id             uuid primary key default gen_random_uuid(),
   household_id   uuid not null references households (id) on delete cascade,
 
-  kind           text not null check (kind in ('group_package','group_dropin','private')),
+  kind           text not null check (kind in ('group_package','group_dropin','private','camp')),
 
   -- What is being bought. Which of these is set depends on kind; the check
   -- below makes the combinations explicit rather than conventional.
@@ -32,6 +32,12 @@ create table checkout_intents (
   session_id     uuid references sessions (id) on delete cascade,
   private_slot_id uuid references private_slots (id) on delete cascade,
   season_id      uuid references seasons (id) on delete set null,
+  -- Camps are added in 0013; the column is declared there rather than here so
+  -- the table it points at exists.
+
+  -- Anything kind-specific that is not worth a column: the camp day option,
+  -- the add-ons chosen, the forms agreed to.
+  options        jsonb not null default '{}'::jsonb,
 
   -- Priced here, by the server, once. The edge function reads this number and
   -- sends it to Stripe; it never receives one.
@@ -59,6 +65,7 @@ create table checkout_intents (
     (kind = 'group_package' and group_id is not null)
     or (kind = 'group_dropin' and session_id is not null)
     or (kind = 'private'      and private_slot_id is not null)
+    or (kind = 'camp')
   )
 );
 
@@ -426,6 +433,12 @@ begin
     -- Does this make the trip worth making? 0006 decides; the family is told
     -- either way.
     perform evaluate_trainer_block(v_slot.id);
+
+  elsif v_intent.kind = 'camp' then
+    -- settle_camp_checkout() lives in 0014, alongside the camp tables. This
+    -- function stays the single dispatcher — plpgsql resolves the call when it
+    -- runs, by which time 0014 has been applied.
+    v_booked := settle_camp_checkout(v_intent.id, v_payment.id);
   end if;
 
   update checkout_intents
@@ -785,7 +798,8 @@ begin
     update checkout_intents set state = 'expired' where id = v_row.id;
 
     -- Put a held private slot back on the board. Group holds are released by
-    -- expire_booking_holds(), which also returns any reserved credit.
+    -- expire_booking_holds(), which also returns any reserved credit; camp
+    -- holds by expire_camp_holds().
     if v_row.private_slot_id is not null then
       update private_slots set status = 'available'
       where id = v_row.private_slot_id and status = 'held';

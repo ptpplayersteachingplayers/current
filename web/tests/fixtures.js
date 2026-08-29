@@ -45,9 +45,13 @@ export function atLocal(dayOffset, hour, minute = 0) {
 }
 
 // Plain hours from now, for the cases where what matters is which side of a
-// deadline something falls on rather than which day it lands on.
+// deadline something falls on rather than which day it lands on. Rounded down
+// to the half hour, because "5:30pm" reads like a training session and
+// "5:28pm" reads like a bug.
 export function inHours(offset) {
-  return new Date(Date.now() + offset * 3_600_000).toISOString();
+  const at = new Date(Date.now() + offset * 3_600_000);
+  at.setMinutes(at.getMinutes() < 30 ? 0 : 30, 0, 0);
+  return at.toISOString();
 }
 
 const settings = [
@@ -168,4 +172,27 @@ export const midCheckoutFixtures = {
       },
     ],
   },
+};
+
+// =============================================================================
+// For the screenshots
+// =============================================================================
+// The same family with sessions at plausible hours — 5:30 on a weekday evening
+// rather than however many hours from whenever the script happens to run. The
+// suite above wants determinism; a picture wants to look like a Tuesday.
+
+const demoBookings = [
+  booking("b1", "confirmed", atLocal(3, 17, 30), "s1"),
+  booking("b2", "confirmed", atLocal(1, 17, 30), "s2"),
+  { ...booking("b3", "attended", atLocal(-3, 17, 30), "s0"), credit_id: "c3" },
+];
+
+export const demoFixtures = {
+  ...parentFixtures,
+  tables: { ...parentFixtures.tables, bookings: demoBookings },
+};
+
+export const demoMidCheckoutFixtures = {
+  ...midCheckoutFixtures,
+  tables: { ...midCheckoutFixtures.tables, bookings: demoBookings },
 };

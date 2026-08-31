@@ -383,7 +383,9 @@ begin
         select jsonb_agg(jsonb_build_object('name', name, 'paid', paid, 'short_by', short_by))
         from group_utilisation() where status = 'forming'), '[]'::jsonb)),
 
-    'needs_follow_up', (select count(*) from scheduled_followups where state = 'pending'),
+    -- Contributed by the agent module. Zero when it is not installed; the
+    -- platform does not read that module's tables directly.
+    'needs_follow_up', module_metric('pending_followups'),
     'open_escalations', (select count(*) from escalations where state in ('open','acknowledged'))
   );
 end;
@@ -507,24 +509,9 @@ grant execute on function acknowledge_escalation(uuid) to authenticated;
 grant execute on function set_automation_paused(boolean, text) to authenticated;
 grant execute on function assert_staff() to authenticated;
 
--- The weekly tier now has something to run.
-create or replace function jobs_for_tier(p_tier text)
-returns text[]
-language sql
-immutable
-as $$
-  select case p_tier
-    when 'five_minute' then array['expire_holds','expire_camp_holds','expire_checkouts',
-                                  'reap_webhook_claims','send_followups']
-    when 'hourly'      then array['lapse_invites','promote_waitlists','promote_camp_waitlists',
-                                  'send_reminders','complete_sessions','release_credits',
-                                  'queue_followups']
-    when 'daily'       then array['expire_credits','record_hours','flag_near_threshold',
-                                  'archive_past_camps']
-    when 'weekly'      then array['weekly_report']
-    else array[]::text[]
-  end;
-$$;
+-- The weekly job below is registered in core_jobs by migration 0020. The
+-- dispatcher reads that registry, so adding weekly work no longer means
+-- editing a case statement — which is what makes a module possible.
 
 -- The weekly job records the summary rather than emailing it. Sending is the
 -- edge function's job; having a durable copy of what was true that week is
@@ -556,65 +543,3 @@ begin
 end;
 $$;
 
-create or replace function run_scheduled_job(p_job_key text, p_tier text default 'manual')
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_job_id uuid;
-  v_items  integer := 0;
-begin
-  perform assert_service_only('Running a scheduled job');
-
-  if automation_paused() and p_job_key not in ('expire_holds','expire_camp_holds',
-                                               'expire_checkouts','release_credits',
-                                               'reap_webhook_claims') then
-    return jsonb_build_object('skipped', true, 'reason', 'automation_paused');
-  end if;
-
-  insert into scheduled_jobs (job_key, tier) values (p_job_key, p_tier)
-  returning id into v_job_id;
-
-  begin
-    case p_job_key
-      when 'expire_holds'        then v_items := expire_booking_holds();
-      when 'expire_camp_holds'   then v_items := expire_camp_holds();
-      when 'expire_checkouts'    then v_items := expire_checkout_intents();
-      when 'reap_webhook_claims' then v_items := reap_stale_webhook_claims();
-      when 'release_credits'     then v_items := release_stranded_credits();
-      when 'lapse_invites'       then v_items := lapse_waitlist_invites();
-      when 'promote_waitlists'   then v_items := promote_all_waitlists();
-      when 'promote_camp_waitlists' then v_items := promote_all_camp_waitlists();
-      when 'send_reminders'      then v_items := send_session_reminders();
-      when 'expire_credits'      then v_items := expire_package_credits();
-      when 'complete_sessions'   then v_items := complete_past_sessions();
-      when 'record_hours'        then v_items := record_completed_shift_hours();
-      when 'flag_near_threshold' then v_items := flag_groups_near_threshold();
-      when 'archive_past_camps'  then v_items := archive_past_camps();
-      when 'queue_followups'     then v_items := queue_followups();
-      when 'send_followups'      then v_items := send_due_followups();
-      when 'weekly_report'       then v_items := record_weekly_report();
-      else
-        raise exception 'Unknown job %', p_job_key using errcode = 'check_violation';
-    end case;
-
-    update scheduled_jobs
-    set finished_at = now(), succeeded = true, items_processed = v_items
-    where id = v_job_id;
-
-    return jsonb_build_object('job', p_job_key, 'items', v_items, 'succeeded', true);
-
-  exception when others then
-    update scheduled_jobs
-    set finished_at = now(), succeeded = false, error = sqlerrm
-    where id = v_job_id;
-
-    perform escalate('scheduling', format('Job %s failed: %s', p_job_key, sqlerrm),
-                     'urgent', 'scheduled_jobs', v_job_id);
-
-    return jsonb_build_object('job', p_job_key, 'succeeded', false, 'error', sqlerrm);
-  end;
-end;
-$$;

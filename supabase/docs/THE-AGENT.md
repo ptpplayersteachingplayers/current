@@ -4,9 +4,24 @@ It answers parents by SMS and email, and books them in. Most of it lives in the
 database rather than in a prompt, for one reason: a prompt is a request, and a
 grant is a fact.
 
+## Where it lives
+
+It is a module, not part of the platform: `supabase/modules/agent`, installed
+and removed on its own with `./install.sh install` and `./install.sh uninstall`.
+Camps, training, checkout and the two portals run without it.
+
+The line is drawn at the record versus the reasoning. The platform keeps
+identity, consent, conversations, messages and the escalation queue — a parent
+reads their own thread and an administrator works the queue whether or not
+anything automated exists. The module adds the model's view of a family
+(`agent_context`), what may honestly be offered (`agent_options_for_player`),
+the phrases it never gets to answer (`must_escalate`), the follow-up queue and
+the HubSpot view. Uninstalling drops those and leaves every message, thread and
+consent record where it was.
+
 ## What it can do
 
-Ten tools, listed in `functions/_shared/agent.ts`. Each one is a single call to
+Ten tools, listed in `modules/agent/functions/agent-tools.ts`. Each one is a single call to
 a database function that enforces its own rule:
 
 | Tool | Underneath |
@@ -33,7 +48,7 @@ Not by instruction. There is no function to call.
 - Write to the audit log, run a job, or commit a trainer to a block.
 
 Every one of those is `revoke all ... from public, anon, authenticated` in
-0017 and 0019, and the agent reaches the database through a service key held in
+0017, 0019 and the module’s own install, and the agent reaches the database through a service key held in
 an edge function. `verify.sh` asserts each refusal, as an anonymous caller and
 as a signed-in parent.
 
@@ -68,7 +83,7 @@ between a message they asked for by booking and one we decided to send.
 ## What is not verified
 
 The agent loop has never run. There is no Deno runtime here and no Anthropic
-key, so `functions/agent/index.ts`, the two inbound webhooks and the HubSpot
+key, so `modules/agent/functions/agent/index.ts`, the two inbound webhooks and the HubSpot
 sync are design plus review — the model call, the tool loop and the retry
 behaviour are all unexecuted.
 

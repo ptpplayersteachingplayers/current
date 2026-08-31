@@ -1,5 +1,5 @@
 -- =============================================================================
--- 0020 — The CRM view
+-- Module: agent — 020 follow-ups and the CRM view
 -- =============================================================================
 -- What HubSpot needs to know about a family, assembled here rather than in the
 -- integration. The sync function then does no thinking of its own — it reads
@@ -388,86 +388,31 @@ as $$
   end;
 $$;
 
--- Wire them into the tiers.
-create or replace function jobs_for_tier(p_tier text)
-returns text[]
-language sql
-immutable
-as $$
-  select case p_tier
-    when 'five_minute' then array['expire_holds','expire_camp_holds','expire_checkouts',
-                                  'reap_webhook_claims','send_followups']
-    when 'hourly'      then array['lapse_invites','promote_waitlists','promote_camp_waitlists',
-                                  'send_reminders','complete_sessions','release_credits',
-                                  'queue_followups']
-    when 'daily'       then array['expire_credits','record_hours','flag_near_threshold',
-                                  'archive_past_camps']
-    when 'weekly'      then array[]::text[]
-    else array[]::text[]
-  end;
-$$;
+-- Scheduled work is declared to the platform registry, not added to the
+-- platform's dispatcher. Installing this module adds two jobs; uninstalling it
+-- removes them, and core never learns their names.
 
-create or replace function run_scheduled_job(p_job_key text, p_tier text default 'manual')
-returns jsonb
-language plpgsql
+do $mod$ begin
+  perform register_module_job('agent', 'queue_followups', 'hourly',      'queue_followups',    false, 110::smallint);
+  perform register_module_job('agent', 'send_followups',  'five_minute', 'send_due_followups', false, 111::smallint);
+end $mod$;
+
+-- The weekly summary reports a follow-up backlog when this module supplies one.
+create or replace function pending_followup_count()
+returns bigint
+language sql
+stable
 security definer
 set search_path = public
 as $$
-declare
-  v_job_id uuid;
-  v_items  integer := 0;
-begin
-  perform assert_service_only('Running a scheduled job');
-
-  if automation_paused() and p_job_key not in ('expire_holds','expire_camp_holds',
-                                               'expire_checkouts','release_credits',
-                                               'reap_webhook_claims') then
-    return jsonb_build_object('skipped', true, 'reason', 'automation_paused');
-  end if;
-
-  insert into scheduled_jobs (job_key, tier) values (p_job_key, p_tier)
-  returning id into v_job_id;
-
-  begin
-    case p_job_key
-      when 'expire_holds'        then v_items := expire_booking_holds();
-      when 'expire_camp_holds'   then v_items := expire_camp_holds();
-      when 'expire_checkouts'    then v_items := expire_checkout_intents();
-      when 'reap_webhook_claims' then v_items := reap_stale_webhook_claims();
-      when 'release_credits'     then v_items := release_stranded_credits();
-      when 'lapse_invites'       then v_items := lapse_waitlist_invites();
-      when 'promote_waitlists'   then v_items := promote_all_waitlists();
-      when 'promote_camp_waitlists' then v_items := promote_all_camp_waitlists();
-      when 'send_reminders'      then v_items := send_session_reminders();
-      when 'expire_credits'      then v_items := expire_package_credits();
-      when 'complete_sessions'   then v_items := complete_past_sessions();
-      when 'record_hours'        then v_items := record_completed_shift_hours();
-      when 'flag_near_threshold' then v_items := flag_groups_near_threshold();
-      when 'archive_past_camps'  then v_items := archive_past_camps();
-      when 'queue_followups'     then v_items := queue_followups();
-      when 'send_followups'      then v_items := send_due_followups();
-      else
-        raise exception 'Unknown job %', p_job_key using errcode = 'check_violation';
-    end case;
-
-    update scheduled_jobs
-    set finished_at = now(), succeeded = true, items_processed = v_items
-    where id = v_job_id;
-
-    return jsonb_build_object('job', p_job_key, 'items', v_items, 'succeeded', true);
-
-  exception when others then
-    update scheduled_jobs
-    set finished_at = now(), succeeded = false, error = sqlerrm
-    where id = v_job_id;
-
-    perform escalate('scheduling', format('Job %s failed: %s', p_job_key, sqlerrm),
-                     'urgent', 'scheduled_jobs', v_job_id);
-
-    return jsonb_build_object('job', p_job_key, 'succeeded', false, 'error', sqlerrm);
-  end;
-end;
+  select count(*) from scheduled_followups where state = 'pending';
 $$;
+
+do $mod$ begin
+  perform register_module_metric('agent', 'pending_followups', 'pending_followup_count');
+end $mod$;
+
+revoke all on function pending_followup_count() from public, anon, authenticated;
 
 revoke all on function queue_followups() from public, anon, authenticated;
 revoke all on function send_due_followups() from public, anon, authenticated;

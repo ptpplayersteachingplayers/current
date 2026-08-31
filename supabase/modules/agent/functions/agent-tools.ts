@@ -12,7 +12,7 @@
 // call.
 // =============================================================================
 
-import { asService } from "./db.ts";
+import { asService } from "../../../functions/_shared/db.ts";
 
 export interface ToolResult {
   ok: boolean;

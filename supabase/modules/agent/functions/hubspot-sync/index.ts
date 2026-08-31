@@ -13,8 +13,8 @@
 // protection as anything else.
 // =============================================================================
 
-import { asService } from "../_shared/db.ts";
-import { json } from "../_shared/http.ts";
+import { asService } from "../../../../functions/_shared/db.ts";
+import { json } from "../../../../functions/_shared/http.ts";
 
 const HUBSPOT = "https://api.hubapi.com";
 

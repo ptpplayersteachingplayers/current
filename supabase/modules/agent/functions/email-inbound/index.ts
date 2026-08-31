@@ -7,8 +7,8 @@
 // rather than starting a second one.
 // =============================================================================
 
-import { asService } from "../_shared/db.ts";
-import { verifyStripeSignature } from "../_shared/signature.ts";
+import { asService } from "../../../../functions/_shared/db.ts";
+import { verifyStripeSignature } from "../../../../functions/_shared/signature.ts";
 
 const ok = (payload: Record<string, unknown> = { received: true }) =>
   new Response(JSON.stringify(payload), {

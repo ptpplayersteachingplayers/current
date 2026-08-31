@@ -55,17 +55,33 @@ migrations/
   0008_messaging.sql           conversations, messages, escalations
   0011_checkout.sql            checkout intents, settlement, refunds, waitlist conversion, attendance
   0012_jobs.sql                reminders, promotions, the tier dispatcher
+  0013_camps.sql               camps, sessions, staffing, add-ons, proximity search
+  0014_camp_registration.sql   camp holds, pricing, registration, waitlist, attendance
+  0016_public_reads.sql        what an anonymous visitor may read
+  0017_lockdown.sql            every function revoked from PUBLIC, then allow-listed back
+  0018_corrections.sql         the audit's findings, each with a regression test
+  0019_identity_messaging.sql  identity matching, consent, conversations, escalations
+  0020_modules.sql             the module registry and the registry-driven job dispatcher
+  0021_reports.sql             payroll, utilisation, the weekly summary, the queue
+modules/
+  agent/                       the AI agent, installed and removable separately
+    010_install.sql            agent context, what may be offered, the escalation regex
+    020_hubspot.sql            follow-ups, the CRM view, job and metric registration
+    999_uninstall.sql          removes the agent, keeps the family's history
+    install.sh                 apply the SQL, link the edge functions
+    functions/                 agent, quo-webhook, email-inbound, hubspot-sync
 docs/
   PHASE-0-AUDIT.md             what is in the old system and what happens to it
   BOOKING-A-PACKAGE.md         a real purchase, traced through the database
 functions/
   _shared/                     clients, HTTP, Stripe, signature verification
-  catalog checkout stripe-webhook book-with-credit
+  catalog checkout camp-checkout stripe-webhook book-with-credit
   cancel-booking waitlist attendance jobs
   tests/signature.test.mjs
 seed/
   0009_settings.sql            every operational number
-  0010_demo_season.sql         one season, six groups, three trainers, six families
+  0010_demo_season.sql         one season, six groups, three trainers, seven families
+  0015_camps.sql               four 2027 camps in four different states
 ```
 
 ## The rules, and where they live
@@ -116,12 +132,26 @@ sudo -u postgres /usr/lib/postgresql/16/bin/pg_ctl -D /tmp/pgtest/data \
 `auth.uid()` and `auth.jwt()` are stubbed by `verify.sh`; Supabase provides
 them in production.
 
+## Core and modules
+
+The platform is camps, training, payments and the portals. The AI agent is a
+module in `modules/agent`, installed and removed separately, because those are
+different things with different risks: turning the agent off at 9pm because it
+said something wrong must not stop a family registering for camp.
+
+Two mechanisms keep that boundary real rather than a folder convention. A
+module declares its scheduled work, and any number it contributes, into
+`platform_modules`, `module_jobs` and `module_metrics` — so `run_scheduled_job()`
+looks a job up and calls it by name, and adding one no longer means editing
+core. And `verify.sh` applies the core alone first, asserts the booking path
+still works and that the agent's tables are genuinely absent, then installs the
+module; at the end it uninstalls it and asserts the platform still sells a
+season while the family's messages and consent survive. Core quietly coming to
+depend on a module fails one half or the other.
+
 ## Not built yet
 
-Phase 3 is the parent and trainer interfaces. Phase 4 is Quo, HubSpot, the
-WordPress API bridge and the AI follow-up agent — `conversations`, `messages`
-and `escalate()` are in place for it, and `queue_outbound_message()` is the
-only way anything may send.
+The WordPress API bridge, and the redirects from the old site.
 
 Not verified, and honestly: no edge function has ever run. There is no Deno
 runtime here and no Stripe account to call, so `functions/` is design plus one

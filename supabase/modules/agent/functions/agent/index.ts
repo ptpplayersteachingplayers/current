@@ -9,9 +9,9 @@
 // family is waiting, whatever happens here.
 // =============================================================================
 
-import { asService } from "../_shared/db.ts";
-import { json } from "../_shared/http.ts";
-import { SYSTEM_PROMPT, TOOLS, runTool } from "../_shared/agent.ts";
+import { asService } from "../../../../functions/_shared/db.ts";
+import { json } from "../../../../functions/_shared/http.ts";
+import { SYSTEM_PROMPT, TOOLS, runTool } from "../agent-tools.ts";
 
 const MAX_TURNS = 6;
 

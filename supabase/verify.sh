@@ -112,6 +112,63 @@ done
 echo "  ok   every migration and seed applied"
 echo
 
+# =============================================================================
+# The platform, with nothing installed on top of it
+# =============================================================================
+# This is the half of the test that makes "plugin" mean something. Everything
+# below runs against core alone: no agent tables, no follow-up queue, no
+# HubSpot. If somebody adds a core query against a module's table, it fails
+# here rather than in production the first time the agent is turned off.
+
+echo "PLATFORM WITHOUT MODULES"
+assert "select to_regclass('public.scheduled_followups') is null;" \
+       "the agent's tables are genuinely absent"                                                                          "^t$"
+assert "select count(*) from platform_modules;" \
+       "…and nothing is registered"                                                                                        "^0$"
+
+assert "select price_group_package((select id from training_groups where slug='u9-foundation')) > 0;" \
+       "a season is still priced"                                                                                          "^t$"
+assert "select count(*) > 0 from camps_near('19401', 40);" \
+       "a family still finds a camp near them"                                                                             "^t$"
+assert "select session_has_space((select id from sessions where group_id=(select id from training_groups where slug='u9-foundation') limit 1));" \
+       "a session still knows whether it has room"                                                                         "^t$"
+HOLD_CORE=$(Q "select (create_booking_hold((select id from sessions where group_id=(select id from training_groups where slug='u9-foundation') order by starts_at limit 1),(select id from players where first_name='Leo'))).id;")
+assert "select count(*) from booking_holds where id='$HOLD_CORE' and expires_at > now();" \
+       "a place can still be held with no agent installed"                                                                 "^1$"
+Q "delete from booking_holds where id='$HOLD_CORE';" >/dev/null
+
+assert "select 'send_reminders' = any(jobs_for_tier('hourly'));" \
+       "the platform's own hourly jobs are registered"                                                                     "^t$"
+assert "select 'queue_followups' = any(jobs_for_tier('hourly'));" \
+       "…and a module's are not, because it is not installed"                                                              "^f$"
+assert "select run_scheduled_job('queue_followups','hourly')::text;" \
+       "asking for a job whose module is absent says so rather than doing nothing quietly"                                 "No such job is registered"
+
+assert "select module_metric('pending_followups');" \
+       "a number the platform does not compute reads as zero, not as an error"                                             "^0$"
+assert "select (weekly_summary()::jsonb) ->> 'needs_follow_up';" \
+       "…so the weekly summary is still a complete object"                                                                 "^0$"
+echo
+
+# Now install the module and carry on. Everything after this point may assume
+# the agent exists.
+for f in modules/*/0*.sql; do
+  if ! psql $PSQL_ARGS -d "$DB" -v ON_ERROR_STOP=1 -q -f "$f" >/dev/null 2>&1; then
+    echo "  FAIL applying $f"
+    psql $PSQL_ARGS -d "$DB" -v ON_ERROR_STOP=1 -f "$f" 2>&1 | grep ERROR | head -3
+    exit 1
+  fi
+done
+echo "MODULES"
+assert "select count(*) from platform_modules where name='agent' and enabled;" \
+       "the agent module installs and registers itself"                                                                    "^1$"
+assert "select 'queue_followups' = any(jobs_for_tier('hourly'));" \
+       "…and its scheduled work appears without core being edited"                                                         "^t$"
+assert "select (weekly_summary()::jsonb) ->> 'needs_follow_up' is not null;" \
+       "…and the number it contributes is now reported"                                                                    "^t$"
+echo
+
+
 echo "SEEDED STATE"
 assert "select status from training_groups where slug='u12-advanced';"   "six paid players reads as Full"                 "^full$"
 assert "select status from training_groups where slug='u14-advanced';"   "four paid players reads as Confirmed"           "^confirmed$"
@@ -792,6 +849,26 @@ assert "select automation_paused();" "…and it takes effect immediately"       
 assert "select count(*) from audit_logs where action='automation.paused';" "…recorded with a reason"                          "^1$"
 assert_admin "select set_automation_paused(false, 'all clear');" "…and start it again"                                        "^f$"
 assert_as "$MAI" "select set_automation_paused(true, 'mischief');" "a parent cannot"                                          "administrator action"
+echo
+
+echo "REMOVING THE MODULE"
+# The last thing a module has to prove is that it can leave. Run this at the
+# end, because everything after it is a platform with no agent.
+if ! psql $PSQL_ARGS -d "$DB" -v ON_ERROR_STOP=1 -q -f modules/agent/999_uninstall.sql >/dev/null 2>&1; then
+  printf "  FAIL the agent module could not be uninstalled\n"; fail=$((fail+1))
+  psql $PSQL_ARGS -d "$DB" -v ON_ERROR_STOP=1 -f modules/agent/999_uninstall.sql 2>&1 | grep ERROR | head -3
+else
+  printf "  ok   the agent module uninstalls cleanly\n"; pass=$((pass+1))
+fi
+assert "select count(*) from platform_modules where name='agent';" "…deregistering itself"                                    "^0$"
+assert "select 'queue_followups' = any(jobs_for_tier('hourly'));" "…and taking its scheduled work with it"                    "^f$"
+assert "select to_regclass('public.scheduled_followups') is null;" "…and its queue"                                           "^t$"
+assert "select count(*) > 0 from messages;" "the family's messages are still there"                                          "^t$"
+assert "select count(*) > 0 from conversations;" "…and their threads"                                                        "^t$"
+assert "select sms_consent from contacts where email='simi.demo@example.test';" "…and what they agreed to receive"           "^t$"
+assert "select price_group_package((select id from training_groups where slug='u9-foundation')) > 0;" \
+       "and the platform still sells a season"                                                                               "^t$"
+assert "select (weekly_summary()::jsonb) ->> 'needs_follow_up';" "…and still reports a complete week"                        "^0$"
 echo
 
 echo "============================================================"

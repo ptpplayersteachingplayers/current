@@ -95,6 +95,22 @@ for inbound SMS, inbound email, the agent turn and the HubSpot push.
 See `supabase/docs/THE-AGENT.md` for what it can and cannot do, and why the
 "cannot" is a set of missing grants rather than a paragraph of instruction.
 
+**Now a separate module.** `supabase/modules/agent` installs and uninstalls on
+its own; the platform runs without it. The line: the platform keeps identity,
+consent, conversations, messages and the escalation queue, because a parent
+reads their thread and staff work the queue whether or not anything automated
+exists. The module keeps the model's view of a family, what it may offer, the
+escalation regex, the follow-up queue and HubSpot.
+
+Two things make that a boundary rather than a folder. `0020_modules.sql` adds
+`platform_modules`, `module_jobs` and `module_metrics`, and rewrites the job
+dispatcher to look a job up and call it by name — a module registers its work
+instead of a case arm being added to core. And `verify.sh` now runs the core
+alone first (booking path works, `scheduled_followups` does not exist, the
+weekly summary still returns a number), installs the module, and at the end
+uninstalls it and checks the platform still sells a season while every
+message, thread and consent record survives.
+
 ---
 
 ## Phase 6b — Administration and reporting
@@ -122,11 +138,11 @@ parent could read the whole payroll; the assertions now cover each one.
 
 | | Assertions | Against |
 |---|---|---|
-| Database rules | 214 | PostgreSQL 16, built from the migrations each run |
+| Database rules | 237 | PostgreSQL 16, built from the migrations each run |
 | Stripe signature | 12 | the real source the edge function imports, under Node |
 | Portal logic | 77 | pure functions with the clock injected |
 | Portals rendered | 99 | real Chromium, real pages, stubbed backend |
-| **Total** | **402** | |
+| **Total** | **425** | |
 
 `supabase/trace-booking.sh` runs one family's purchase end to end and prints
 what changed at each step; its output is `supabase/docs/BOOKING-A-PACKAGE.md`.
@@ -136,8 +152,8 @@ what changed at each step; its output is `supabase/docs/BOOKING-A-PACKAGE.md`.
 ## Known limitations
 
 **No edge function has ever run.** There is no Deno runtime here and no Stripe,
-Quo, HubSpot or model credentials. Twelve edge functions are design plus
-review. What they call is executed; they are not.
+Quo, HubSpot or model credentials. Twelve edge functions — eight platform,
+four in the agent module — are design plus review. What they call is executed; they are not.
 
 **The payment step is unproven.** Stripe Elements needs a `client_secret` only a
 real `/checkout` can produce.
@@ -201,9 +217,10 @@ Point this at a staging Supabase project and run the migrations. Then, in
 order:
 
 1. `supabase db push` against staging, then `./supabase/verify.sh` with
-   `PGHOST` set to it — the same 187 assertions, against a real Supabase rather
+   `PGHOST` set to it — the same 237 assertions, against a real Supabase rather
    than a local Postgres, which will also prove the RLS grants behave as
-   they do here.
+   they do here. Then `supabase/modules/agent/install.sh install` if the agent
+   is wanted on staging; the platform is deliberately fine without it.
 2. Deploy the edge functions and run the checkout once with a Stripe test card.
    That is the first time any of this code will have executed.
 3. Point Quo's webhook at `/quo-webhook` and text it. That is the second.

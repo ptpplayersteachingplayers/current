@@ -22,6 +22,16 @@ run "stripe signature" node --experimental-strip-types \
   --disable-warning=MODULE_TYPELESS_PACKAGE_JSON supabase/functions/tests/signature.test.mjs
 run "portal logic" node web/tests/derive.test.mjs
 
+# The WordPress plugins are the system still serving real families, so they run
+# here too. A horizon bug sat in them for a year because this file did not.
+echo
+echo "── wordpress plugins ───────────────────────────────────────"
+if command -v php >/dev/null 2>&1; then
+  ( cd wordpress && php tests/run.php ) || failed=1
+else
+  echo "  skipped: php is not installed"
+fi
+
 echo
 echo "── portals in a browser ────────────────────────────────────"
 if [ -d node_modules/playwright ]; then

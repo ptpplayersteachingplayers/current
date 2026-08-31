@@ -72,13 +72,34 @@ T::ok(
 );
 
 // ---- the horizon and notice window are enforced -----------------------------
+// Seed every weekday, so this asserts the horizon rather than accidentally
+// asserting that the far date is not a Tuesday. It passed for a year on that
+// coincidence while the horizon was enforced only in the browser.
+$every_day = [];
+for ($w = 0; $w <= 6; $w++) { $every_day[] = rule($w, '16:00:00', '20:00:00'); }
+
 $far = (new DateTimeImmutable('+400 days'))->format('Y-m-d');
-seed([rule(2, '16:00:00', '20:00:00')]);
+seed($every_day);
 T::eq(
     count($slots->for_trainer(5, $far, $far)),
     0,
     'a date beyond the 45-day horizon is clamped away'
 );
+
+// The day after the horizon is refused; the horizon itself is not. Without
+// both, "clamped away" is satisfied by a function that returns nothing ever.
+$just_past = (new DateTimeImmutable('+' . (PTP_Slots::HORIZON_DAYS + 1) . ' days'))->format('Y-m-d');
+seed($every_day);
+T::eq(count($slots->for_trainer(5, $just_past, $just_past)), 0, 'one day past the horizon yields nothing');
+
+$on_horizon = (new DateTimeImmutable('+' . PTP_Slots::HORIZON_DAYS . ' days'))->format('Y-m-d');
+seed($every_day);
+T::ok(count($slots->for_trainer(5, $on_horizon, $on_horizon)) > 0, 'the horizon day itself is still bookable');
+
+// is_bookable() is the guard run before a booking is written, so the horizon
+// has to hold there too — that is the path a hand-crafted request takes.
+seed($every_day);
+T::eq($slots->is_bookable(5, $far . ' 16:00:00'), false, 'a booking beyond the horizon is refused server-side');
 
 $yesterday = (new DateTimeImmutable('-1 day'))->format('Y-m-d');
 seed([rule(2, '16:00:00', '20:00:00')]);

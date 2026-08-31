@@ -302,6 +302,19 @@ final class PTP_Slots
         return (new DateTimeImmutable('+' . self::MIN_NOTICE_HOURS . ' hours'))->format('Y-m-d H:i:s');
     }
 
+    /**
+     * The last date anyone may book. Measured from today, not from the
+     * requested start — otherwise asking for a window that begins in 2027
+     * moves the horizon along with it, which is how a request 400 days out
+     * used to come back bookable.
+     */
+    private function horizon_end(): string
+    {
+        return (new DateTimeImmutable('today'))
+            ->modify('+' . self::HORIZON_DAYS . ' days')
+            ->format('Y-m-d');
+    }
+
     private function clamp_from(?string $from): string
     {
         $today = (new DateTimeImmutable('today'))->format('Y-m-d');
@@ -313,11 +326,16 @@ final class PTP_Slots
         return $from;
     }
 
+    /**
+     * Note what this deliberately does not do: it never pulls $to up to meet a
+     * $from that sits past the horizon. That leaves the window inverted, and
+     * for_trainer()'s loop then yields nothing — which is the correct answer
+     * for "what can I book in fourteen months", rather than the horizon day's
+     * slots handed back under a date nobody asked for.
+     */
     private function clamp_to(?string $to, string $from): string
     {
-        $max = (new DateTimeImmutable($from))
-            ->modify('+' . self::HORIZON_DAYS . ' days')
-            ->format('Y-m-d');
+        $max = $this->horizon_end();
 
         if ($to === null || !$this->is_date($to) || $to > $max) {
             return $max;

@@ -409,6 +409,69 @@ export function createApi(client, { functionsBase, timeZone = "America/New_York"
       if (error) throw error;
     },
 
+    // ---- administration ---------------------------------------------------
+    // Every one of these asserts staff inside the database. Nothing here is
+    // gated by the interface hiding a button.
+    admin: {
+      today: async () => {
+        const { data, error } = await client.rpc("operations_today");
+        if (error) throw error;
+        return data;
+      },
+
+      week: async (ending = null) => {
+        const { data, error } = await client.rpc("weekly_summary", { p_ending: ending });
+        if (error) throw error;
+        return data;
+      },
+
+      camps: async () => {
+        const { data, error } = await client.rpc("camp_utilisation", { p_season_year: null });
+        if (error) throw error;
+        return data ?? [];
+      },
+
+      groups: async () => {
+        const { data, error } = await client.rpc("group_utilisation", { p_season_id: null });
+        if (error) throw error;
+        return data ?? [];
+      },
+
+      payroll: async (from, to) => {
+        const { data, error } = await client.rpc("payroll_for_period", { p_from: from, p_to: to });
+        if (error) throw error;
+        return data ?? [];
+      },
+
+      markPaid: async (trainerId, from, to, reference) => {
+        const { data, error } = await client.rpc("mark_payroll_paid", {
+          p_trainer_id: trainerId, p_from: from, p_to: to, p_reference: reference,
+        });
+        if (error) throw error;
+        return data;
+      },
+
+      acknowledge: async (id) => {
+        const { error } = await client.rpc("acknowledge_escalation", { p_escalation_id: id });
+        if (error) throw error;
+      },
+
+      resolve: async (id, resolution, resumeAgent) => {
+        const { error } = await client.rpc("resolve_escalation", {
+          p_escalation_id: id, p_resolution: resolution, p_reopen_conversation: resumeAgent,
+        });
+        if (error) throw error;
+      },
+
+      setPaused: async (paused, reason) => {
+        const { data, error } = await client.rpc("set_automation_paused", {
+          p_paused: paused, p_reason: reason,
+        });
+        if (error) throw error;
+        return data;
+      },
+    },
+
     // ---- things that change the world ------------------------------------
     // All of these go through an edge function. None of them takes a price.
     actions: {

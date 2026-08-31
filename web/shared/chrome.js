@@ -279,6 +279,10 @@ export function mountChrome({ variant = "site" } = {}) {
   if (variant === "site") {
     document.body.append(footer(), actionBar());
     document.body.classList.add("has-action-bar");
+  } else if (variant === "wrap") {
+    // A page with its own navigation — the admin console. Header and gutter,
+    // no bottom bar and no marketing footer: staff are not being sold to.
+    document.body.classList.add("has-own-nav");
   } else {
     document.body.append(portalNav(variant));
     document.body.classList.add("has-portal-nav");

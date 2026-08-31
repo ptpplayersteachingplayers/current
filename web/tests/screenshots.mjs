@@ -70,7 +70,8 @@ async function shot(path, fixtures, file, { route=false, checkout=false, after=n
     window.__PTP_INSTALL__ = (async () => {
       const { fakeSupabase } = await import("${base}/tests/fake-supabase.js");
       const fx = await import("${base}/tests/fixtures.js");
-      window.__PTP_TEST_CLIENT__ = fakeSupabase(structuredClone(fx.${fixtures}));
+      const src = fx.${fixtures};
+      window.__PTP_TEST_CLIENT__ = fakeSupabase({ ...structuredClone({ session: src.session ?? null, tables: src.tables }), rpc: src.rpc });
     })();
   `);
   await page.route("https://js.stripe.com/**", r =>
@@ -122,6 +123,7 @@ await shot("/group-training/", "demoFixtures", `${OUT}/flow-2-pay.png`, {
 });
 
 await shot("/my-ptp/parent/", "demoMidCheckoutFixtures", `${OUT}/flow-3-confirming.png`);
+await shot("/my-ptp/admin/", "adminFixtures", `${OUT}/ptp-admin.png`, { height: 2200 });
 await shot("/my-ptp/parent/", "demoFixtures", `${OUT}/flow-4-booked.png`);
 
 await b.close(); s.close();

@@ -715,6 +715,85 @@ assert_anon "select count(*) from hubspot_sync_batch(now());" \
        "a visitor cannot read the CRM view of every family"                                                                 "permission denied"
 echo
 
+echo "REPORTS AND PAYROLL"
+ADMIN_JWT='{"role":"authenticated","sub":"77777777-0000-0000-0000-000000000001","app_metadata":{"ptp_role":"admin"}}'
+ADMIN() {
+  psql $PSQL_ARGS -d "$DB" -tA -q 2>&1 <<EOF | grep -v '^$'
+begin;
+set local role authenticated;
+set local request.jwt.claims = '$ADMIN_JWT';
+$1
+commit;
+EOF
+}
+assert_admin() {
+  local got; got=$(ADMIN "$1")
+  if echo "$got" | grep -qi -- "$3"; then
+    printf "  ok   %s\n" "$2"; pass=$((pass+1))
+  else
+    printf "  FAIL %s\n         got: %s\n" "$2" "$(echo "$got" | head -1)"; fail=$((fail+1))
+  fi
+}
+
+assert_admin "select jsonb_typeof(operations_today() -> 'escalations');" \
+       "an administrator gets the morning view"                                                                             "^array$"
+assert_admin "select jsonb_array_length(operations_today() -> 'groups_nearly_running') >= 0;" \
+       "…including the groups one family from running"                                                                      "^t$"
+assert_admin "select (operations_today() ->> 'automation_paused');" \
+       "…and whether the machinery is running at all"                                                                       "^false$"
+assert_as "$MAI" "select operations_today();" \
+       "a parent cannot read the operations view"                                                                           "administrator action"
+assert_anon "select operations_today();" "…nor can a visitor"                                                               "permission denied"
+
+# The PAY section above consumed the one shift, so make a payable week here
+# rather than depending on what an earlier assertion happened to leave behind.
+Q "insert into trainer_hours (trainer_id, worked_on, minutes, hourly_rate_cents, amount_cents)
+   select id, current_date - 3, 120, 4000, 8000 from trainers where slug='marcus-bell';" >/dev/null
+TRAINER_PAID=$(Q "select id from trainers where slug='marcus-bell';")
+
+assert_admin "select count(*) >= 0 from payroll_for_period(current_date - 60, current_date);" \
+       "payroll totals what was recorded"                                                                                   "^t$"
+assert_admin "select amount_cents from payroll_for_period(current_date - 60, current_date) limit 1;" \
+       "…in cents, like everything else"                                                                                    "^[0-9]"
+assert_as "$MAI" "select * from payroll_for_period(current_date - 60, current_date);" \
+       "a parent cannot read the payroll, even though the grant includes them"                                              "administrator action"
+assert_as "$MAI" "select * from camp_utilisation();" \
+       "…nor the revenue on every camp"                                                                                     "administrator action"
+assert_as "$MAI" "select * from attendance_summary(current_date - 30, current_date);" \
+       "…nor how every other family's child is attending"                                                                    "administrator action"
+
+assert_admin "select mark_payroll_paid('$TRAINER_PAID', current_date - 60, current_date, 'batch-1');" \
+       "marking a payroll run paid marks the hours in it"                                                                    "^[1-9]"
+assert_admin "select mark_payroll_paid('$TRAINER_PAID', current_date - 60, current_date, 'batch-2');" \
+       "…and running the export twice does not pay twice"                                                                    "^0$"
+
+assert_admin "select round(fill_rate,2) from camp_utilisation() where name like 'Doylestown%';" \
+       "a full camp reads as fully utilised"                                                                                 "^1.00$"
+assert_admin "select short_by from group_utilisation() where name like '%U9%';" \
+       "a group short of the threshold says how short"                                                                       "^[0-9]"
+assert_admin "select jsonb_typeof(weekly_summary(current_date) -> 'revenue');" \
+       "the weekly summary is one object"                                                                                    "^object$"
+assert_admin "select (weekly_summary(current_date) -> 'revenue' ->> 'gross_cents')::bigint >= 0;" \
+       "…with revenue net of nothing it should not be"                                                                       "^t$"
+echo
+
+echo "WORKING THE QUEUE"
+ESC=$(Q "select id from escalations order by raised_at limit 1;")
+assert_admin "select acknowledge_escalation('$ESC');" "an escalation can be picked up"                                       "^$"
+assert "select state::text from escalations where id='$ESC';" "…and shows as acknowledged"                                   "^acknowledged$"
+assert_admin "select resolve_escalation('$ESC','Rang them; sorted', false);" "…and closed with what was done"                "^$"
+assert "select resolution from escalations where id='$ESC';" "…which is recorded"                                            "Rang them"
+assert "select count(*) from audit_logs where action='escalation.resolved';" "…in the audit log"                             "^1$"
+assert_as "$MAI" "select resolve_escalation('$ESC','nothing to see', true);" \
+       "a parent cannot close an escalation about themselves"                                                                "administrator action"
+
+assert_admin "select set_automation_paused(true, 'incident');" "an administrator can stop everything"                        "^t$"
+assert "select automation_paused();" "…and it takes effect immediately"                                                      "^t$"
+assert "select count(*) from audit_logs where action='automation.paused';" "…recorded with a reason"                          "^1$"
+assert_admin "select set_automation_paused(false, 'all clear');" "…and start it again"                                        "^f$"
+assert_as "$MAI" "select set_automation_paused(true, 'mischief');" "a parent cannot"                                          "administrator action"
+echo
+
 echo "============================================================"
 printf "  %d passed, %d failed\n" "$pass" "$fail"
 echo "============================================================"

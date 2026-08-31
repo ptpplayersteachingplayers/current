@@ -207,3 +207,73 @@ export const demoMidCheckoutFixtures = {
   ...midCheckoutFixtures,
   tables: { ...midCheckoutFixtures.tables, bookings: demoBookings },
 };
+
+// An administrator: the same shape as a parent, plus the claim. The claim is
+// what the database checks; nothing about the interface grants it.
+export const adminFixtures = {
+  ...parentFixtures,
+  session: {
+    user: { id: "u9", email: "ops@example.test", app_metadata: { ptp_role: "admin" } },
+    access_token: "t",
+  },
+  rpc: {
+    operations_today: () => ({
+      escalations: [
+        {
+          id: "e1", severity: "urgent", summary: "Parent reported an injury at Tuesday's session",
+          source: "safety", raised_at: inHours(-5), due_at: inHours(-1), overdue: true,
+          recommended_action: "Ring them today", household: "Adeyemi family",
+          contact: "Simi Adeyemi", phone: "+12155550208", conversation_id: "cv1",
+        },
+        {
+          id: "e2", severity: "normal", summary: "Charged amount does not match the quoted price",
+          source: "payment", raised_at: inHours(-2), due_at: inHours(2), overdue: false,
+          recommended_action: "Check the Stripe intent", household: "Nguyen family",
+          contact: "Mai Nguyen", phone: "+12155550203", conversation_id: null,
+        },
+      ],
+      groups_nearly_running: [
+        { id: "g1", name: "Mon/Wed U9 Foundation", paid: 3, short_by: 1, sessions_remaining: 14 },
+      ],
+      camps_at_risk: [
+        { id: "c1", name: "Princeton Week 3", city: "Princeton", fill_rate: 0.2,
+          days_until: 30, registered: 8, capacity: 40 },
+      ],
+      unpaid_checkouts: [
+        { id: "ci9", kind: "group_package", amount_cents: 56000,
+          created_at: inHours(-6), household: "Silva family" },
+      ],
+      failed_jobs: [],
+      stuck_webhooks: 0,
+      unverified_fields: [{ id: "l9", name: "Westgate Park", city: "Trenton" }],
+      automation_paused: false,
+      sessions_today: 4,
+    }),
+
+    camp_utilisation: () => [
+      { camp_id: "c1", name: "Norristown Week 1", city: "Norristown", state: "PA",
+        starts_on: "2027-06-21", status: "registration_open", capacity: 60, registered: 6,
+        fill_rate: 0.1, revenue_cents: 237000, days_until: 120 },
+    ],
+
+    group_utilisation: () => [
+      { group_id: "g1", name: "Mon/Wed U9 Foundation", status: "forming", min_players: 4,
+        paid: 3, capacity: 6, fill_rate: 0.5, short_by: 1, revenue_cents: 168000,
+        sessions_remaining: 14 },
+    ],
+
+    payroll_for_period: () => [
+      { trainer_id: "t1", trainer_name: "Dani Okoro", stripe_account_id: "acct_1",
+        sessions: 6, minutes: 720, hours: 12, amount_cents: 48000, unpaid_cents: 16000,
+        first_worked: "2026-08-17", last_worked: "2026-08-28" },
+      { trainer_id: "t2", trainer_name: "Marcus Bell", stripe_account_id: null,
+        sessions: 4, minutes: 480, hours: 8, amount_cents: 32000, unpaid_cents: 0,
+        first_worked: "2026-08-18", last_worked: "2026-08-27" },
+    ],
+
+    acknowledge_escalation: () => null,
+    resolve_escalation: () => null,
+    set_automation_paused: (args) => args.p_paused,
+    mark_payroll_paid: () => 3,
+  },
+};

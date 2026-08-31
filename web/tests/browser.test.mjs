@@ -130,7 +130,13 @@ async function open(path, fixturesName, { signedIn = true, routes = [] } = {}) {
     window.__PTP_INSTALL__ = (async () => {
       const { fakeSupabase } = await import("${base}/tests/fake-supabase.js");
       const fixtures = await import("${base}/tests/fixtures.js");
-      const chosen = structuredClone(fixtures[window.__PTP_FIXTURES__.fixturesName]);
+      // structuredClone cannot copy a function, and the rpc handlers in a
+      // fixture are functions. Clone the data, carry the handlers across.
+      const source = fixtures[window.__PTP_FIXTURES__.fixturesName];
+      const chosen = {
+        ...structuredClone({ session: source.session ?? null, tables: source.tables }),
+        rpc: source.rpc,
+      };
       if (!window.__PTP_FIXTURES__.signedIn) chosen.session = null;
       window.__PTP_FIXTURE_DATA__ = chosen;
       window.__PTP_TEST_CLIENT__ = fakeSupabase(chosen);
@@ -411,6 +417,100 @@ console.log("TRAINER PORTAL");
       null, { timeout: TIMEOUT });
     const text = await page.textContent("#app");
     return text.includes("Locked gate") ? true : "no route for a field problem";
+  });
+
+  await page.close();
+}
+
+console.log("");
+console.log("ADMIN");
+
+{
+  const { page, problems } = await open("/my-ptp/admin/", "adminFixtures");
+  await page.waitForSelector("#app h2, #app h1", { timeout: TIMEOUT });
+  const body = await page.textContent("#app");
+
+  await check("the admin console renders without a console error", () =>
+    problems.length === 0 ? true : problems.join(" | "));
+
+  await check("it leads with what needs a person", () =>
+    body.includes("Needs a person") && body.includes("reported an injury")
+      ? true : "the queue was not first");
+
+  await check("…and an overdue one is marked as such", async () => {
+    const marked = await page.$$eval(".card-overdue", (n) => n.length);
+    return marked === 1 ? true : `${marked} rows marked overdue`;
+  });
+
+  await check("a group one family short is surfaced", () =>
+    body.includes("1 to start") ? true : "the nearly-running group was missing");
+
+  await check("a camp that is not selling is surfaced with its fill rate", () =>
+    body.includes("20%") ? true : "no fill rate shown");
+
+  await check("a field nobody has confirmed is called out", () =>
+    body.includes("Westgate Park") ? true : "unverified fields were not shown");
+
+  await check("staff are not sold to: no marketing footer or Find a Camp bar", async () => {
+    const footer = await page.$(".site-footer");
+    const bar = await page.$(".action-bar");
+    return footer === null && bar === null
+      ? true
+      : `${footer ? "footer " : ""}${bar ? "action bar" : ""} on the admin console`;
+  });
+
+  await check("the pause switch says what it will actually do before it does it", async () => {
+    await page.click("button:text('Pause all automation')");
+    await page.waitForSelector(".sheet", { timeout: TIMEOUT });
+    const sheet = await page.textContent(".sheet");
+    await page.click(".sheet button:text('Never mind')");
+    return sheet.includes("no agent replies") && sheet.includes("Bookings and payments carry on")
+      ? true : `the sheet said: ${sheet.slice(0, 140)}`;
+  });
+
+  await check("closing an escalation asks what was done", async () => {
+    await page.click("button:text('Resolve')");
+    await page.waitForSelector(".sheet", { timeout: TIMEOUT });
+    const hasNote = await page.$(".sheet input[type=text]");
+    const hasResume = await page.$(".sheet input[type=checkbox]");
+    await page.click(".sheet button:text('Never mind')");
+    return hasNote && hasResume ? true : "no note or no choice about the assistant";
+  });
+
+  await page.close();
+}
+
+{
+  const { page } = await open("/my-ptp/admin/", "adminFixtures");
+  await page.waitForSelector("#app");
+
+  await check("the pay tab totals what is owed", async () => {
+    await page.click(".tab:text('Pay')");
+    await page.waitForFunction(() => document.querySelector("#app h1")?.textContent === "Pay",
+      null, { timeout: TIMEOUT });
+    const text = await page.textContent("#app");
+    return text.includes("$160") && text.includes("$800") ? true : "the totals were wrong or missing";
+  });
+
+  await check("…flags a trainer with no Stripe account", async () => {
+    const text = await page.textContent("#app");
+    return text.includes("No Stripe account connected") ? true : "the missing account was not flagged";
+  });
+
+  await check("…and recording a payment says plainly that no money moves", async () => {
+    await page.click("button:text('Mark $160 paid')");
+    await page.waitForSelector(".sheet", { timeout: TIMEOUT });
+    const sheet = await page.textContent(".sheet");
+    await page.click(".sheet button:text('Never mind')");
+    return sheet.includes("does not move any money") ? true : `it said: ${sheet.slice(0, 120)}`;
+  });
+
+  await check("the camps tab shows fill and revenue together", async () => {
+    await page.click(".tab:text('Camps')");
+    await page.waitForFunction(() => document.querySelector("#app h1")?.textContent === "Camps",
+      null, { timeout: TIMEOUT });
+    const text = await page.textContent("#app");
+    return text.includes("6/60") && text.includes("$2,370") ? true : `it showed: ${text.slice(0, 200)}`;
   });
 
   await page.close();

@@ -97,6 +97,23 @@ See `supabase/docs/THE-AGENT.md` for what it can and cannot do, and why the
 
 ---
 
+## Phase 6b — Administration and reporting
+
+**Built.** `0021_reports.sql`: payroll for a period, camp and group
+utilisation, attendance, the morning operations view, the weekly summary, and
+the two controls staff need — resolving an escalation and the automation pause
+switch, both recorded in the audit log.
+
+`/my-ptp/admin/` is the screen: what needs a person today, groups one family
+from running, camps not selling, the machinery's failures, fields nobody has
+confirmed, and payroll with a CSV export.
+
+Every report asserts staff **inside the function**, not by hiding a button. An
+administrator is an authenticated user, so the grant has to include
+`authenticated` — which makes the guard in the body the only thing between a
+parent and the payroll. Four of these functions were written without it and a
+parent could read the whole payroll; the assertions now cover each one.
+
 ## Phase 7 — Testing
 
 ```
@@ -105,11 +122,11 @@ See `supabase/docs/THE-AGENT.md` for what it can and cannot do, and why the
 
 | | Assertions | Against |
 |---|---|---|
-| Database rules | 187 | PostgreSQL 16, built from the migrations each run |
+| Database rules | 214 | PostgreSQL 16, built from the migrations each run |
 | Stripe signature | 12 | the real source the edge function imports, under Node |
 | Portal logic | 77 | pure functions with the clock injected |
-| Portals rendered | 54 | real Chromium, real pages, stubbed backend |
-| **Total** | **330** | |
+| Portals rendered | 99 | real Chromium, real pages, stubbed backend |
+| **Total** | **402** | |
 
 `supabase/trace-booking.sh` runs one family's purchase end to end and prints
 what changed at each step; its output is `supabase/docs/BOOKING-A-PACKAGE.md`.
@@ -133,10 +150,8 @@ around them — the model call, the tool round-trip, the retry behaviour — is 
 `${timestamp}.${body}`, which is Stripe's scheme. If Quo differs, that one
 function changes; the verified implementation is shared and tested.
 
-**Not built.** An administrative console (the escalation queue exists in the
-database and has no screen); payroll export; the weekly reporting tier; the
-WordPress API bridge; URL redirects from the old site; camps in the parent
-portal and camp registers in the trainer portal.
+**Not built.** The WordPress API bridge; URL redirects from the old site; camp
+registers in the trainer portal.
 
 **The Expo app still points at WordPress.** It is a fourth client of the old
 system, not a client of the new one.

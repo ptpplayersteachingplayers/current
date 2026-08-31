@@ -66,6 +66,10 @@ const PAGES = [
    "Your day, your registers and your hours.",
    "/my-ptp/trainer/app.js", "trainer"],
 
+  ["my-ptp/admin/index.html", "PTP Admin",
+   "The operations view: what needs a person today.",
+   "/my-ptp/admin/app.js", "wrap"],
+
   ["bring-ptp-to-your-community/index.html", "Bring PTP to Your Community",
    "If you have a field and a group of players, we will bring the coaches.",
    "/bring-ptp-to-your-community/app.js"],

@@ -343,6 +343,11 @@ main.wrap .card h3 { font-size: var(--t-body); letter-spacing: 0; }
    rounded shape, and this system has none. A gold edge does the same job. */
 .message-mine { border-left: 4px solid var(--gold); padding-left: var(--s4); }
 
+/* Something that has passed its due time. The only place in the system where a
+   row is marked rather than a badge, because it has to be findable while
+   scrolling past twenty of them. */
+.card-overdue { border-left: 6px solid var(--gold); padding-left: var(--s4); }
+
 .quote { font-size: var(--t-lede); line-height: 1.5; }
 
 .status { font-size: var(--t-body); margin: var(--s3) 0 0; font-weight: 600; }
@@ -669,7 +674,7 @@ tr:last-child td, tr:last-child th { border-bottom: none; }
 .tab {
   flex: 1 0 auto;
   min-height: 52px;
-  padding: var(--s3) var(--s5);
+  padding: var(--s3) var(--s4);
   border: var(--border);
   background: var(--white);
   color: var(--black);
@@ -680,6 +685,7 @@ tr:last-child td, tr:last-child th { border-bottom: none; }
 .tab + .tab { margin-left: -2px; }
 .tab:hover { background: var(--gold); }
 .tab[aria-selected="true"] { background: var(--black); color: var(--gold); }
+@media (min-width: 760px) { .tab { padding: var(--s3) var(--s5); } }
 
 .portal-nav {
   position: fixed; left: 0; right: 0; bottom: 0;

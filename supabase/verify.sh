@@ -61,6 +61,18 @@ assert() { # assert <sql> <description> <expected-substring>
   fi
 }
 
+# Some rules are proved by what an answer stops saying rather than by it
+# succeeding — lifting the waiver requirement, for instance, does not make an
+# unrelated refusal go away.
+assert_absent() { # assert_absent <sql> <description> <substring-that-must-not-appear>
+  local got; got=$(Q "$1")
+  if echo "$got" | grep -qi -- "$3"; then
+    printf "  FAIL %s\n         got: %s\n" "$2" "$(echo "$got" | head -1)"; fail=$((fail+1))
+  else
+    printf "  ok   %s\n" "$2"; pass=$((pass+1))
+  fi
+}
+
 assert_as() { # assert_as <auth.uid> <sql> <description> <expected-substring>
   local got; got=$(AS "$1" "$2")
   if echo "$got" | grep -qi -- "$4"; then
@@ -849,6 +861,72 @@ assert "select automation_paused();" "…and it takes effect immediately"       
 assert "select count(*) from audit_logs where action='automation.paused';" "…recorded with a reason"                          "^1$"
 assert_admin "select set_automation_paused(false, 'all clear');" "…and start it again"                                        "^f$"
 assert_as "$MAI" "select set_automation_paused(true, 'mischief');" "a parent cannot"                                          "administrator action"
+echo
+
+echo "WAIVERS ON THE TRAINING SIDE"
+LEO=$(Q "select id from players where first_name='Leo';")
+ZARA=$(Q "select id from players where first_name='Zara';")
+TAYO_P=$(Q "select id from players where first_name='Tayo';")
+LEO_SESSION=$(Q "select id from sessions where group_id=(select id from training_groups where slug='u9-foundation') order by starts_at limit 1;")
+
+assert "select player_has_current_waiver('$TAYO_P');"  "a signed waiver reads as current"                                     "^t$"
+assert "select player_has_current_waiver('$LEO');"     "a player who never signed does not"                                   "^f$"
+assert "select player_has_current_waiver('$ZARA');"    "…and neither does one whose waiver lapsed"                            "^f$"
+
+assert "select begin_checkout('group_package','$LEO',(select id from training_groups where slug='u9-foundation'),'wv1');" \
+       "training cannot be bought for a player with no waiver"                                                                "needs a signed waiver"
+assert "select begin_checkout('group_package','$ZARA',(select id from training_groups where slug='u9-foundation'),'wv2');" \
+       "…nor for one whose waiver expired, and it says when"                                                                  "waiver expired on"
+assert "select book_with_credit('$LEO_SESSION','$LEO');" \
+       "a credit is not a way around it"                                                                                      "needs a signed waiver"
+
+# The order matters: a family who is not yours and a family with no waiver must
+# give the same answer, or the error tells a stranger which children exist.
+assert_as "$MAI" "select begin_checkout('group_package','$LEO',(select id from training_groups where slug='u9-foundation'),'wv3');" \
+       "another family's unsigned child is refused for the other reason first"                                                "does not belong to your household"
+
+assert "select array_to_string(training_waiver_missing('{}'::jsonb), ', ');" \
+       "an empty waiver says everything it needs, in words"                                                                   "emergency contact name"
+assert "select 'the media release' = any(training_waiver_missing('{}'::jsonb));" \
+       "…but never asks for the media release, which is optional"                                                             "^f$"
+assert "select array_length(training_waiver_missing('{\"signed_by_name\":\"A\",\"emergency_contact_name\":\"B\",\"emergency_contact_phone\":\"+1\",\"waiver_agreed\":\"true\",\"medical_auth_agreed\":\"true\",\"conduct_agreed\":\"true\"}'::jsonb), 1);" \
+       "a complete one is complete"                                                                                           "^$"
+assert "select 'the waiver' = any(training_waiver_missing('{\"waiver_agreed\":\"false\"}'::jsonb));" \
+       "an unticked box is missing, not answered"                                                                             "^t$"
+
+# Signing it, as the family, through the function a browser would call.
+SIMI='77777777-0000-0000-0000-000000000001'
+LEO_HH=$(Q "select household_id from players where id='$LEO';")
+LEO_UID=$(Q "select auth_user_id from contacts where household_id='$LEO_HH' and auth_user_id is not null limit 1;")
+assert_as "$LEO_UID" "select record_player_waiver('$LEO','{\"signed_by_name\":\"Mai Nguyen\",\"emergency_contact_name\":\"Bao Nguyen\",\"emergency_contact_phone\":\"+12155550300\",\"waiver_agreed\":\"true\",\"medical_auth_agreed\":\"true\",\"conduct_agreed\":\"true\",\"allergies\":\"None\"}'::jsonb) is not null;" \
+       "a parent can sign for their own child"                                                                                "^t$"
+assert "select player_has_current_waiver('$LEO');" "…and the block lifts"                                                     "^t$"
+assert "select count(*) from audit_logs where action='waiver.signed';" "…recorded"                                            "^1$"
+
+assert_as "$LEO_UID" "select record_player_waiver('$LEO','{\"signed_by_name\":\"Mai Nguyen\",\"emergency_contact_name\":\"Updated\",\"emergency_contact_phone\":\"+12155550301\",\"waiver_agreed\":\"true\",\"medical_auth_agreed\":\"true\",\"conduct_agreed\":\"true\"}'::jsonb) is not null;" \
+       "signing again supersedes rather than overwrites"                                                                      "^t$"
+assert "select count(*) from player_waivers where player_id='$LEO';" "…so both are kept"                                      "^2$"
+assert "select count(*) from player_waivers where player_id='$LEO' and superseded_at is null;" \
+       "…and exactly one is live"                                                                                             "^1$"
+
+assert_as "$LEO_UID" "select record_player_waiver('$LEO','{\"signed_by_name\":\"Mai\"}'::jsonb);" \
+       "an incomplete waiver is refused and lists what is missing"                                                            "still needs"
+
+assert_as "$MAI" "select record_player_waiver('$TAYO_P','{\"signed_by_name\":\"Not Me\",\"emergency_contact_name\":\"x\",\"emergency_contact_phone\":\"y\",\"waiver_agreed\":\"true\",\"medical_auth_agreed\":\"true\",\"conduct_agreed\":\"true\"}'::jsonb);" \
+       "a parent cannot sign for another family's child"                                                                      "does not belong to your household"
+assert_anon "select record_player_waiver('$LEO','{}'::jsonb);" "a visitor cannot sign anything"                               "permission denied"
+assert_anon "select player_waiver_status('$LEO');"            "…nor read what a family declared"                              "permission denied"
+assert_anon "select begin_checkout('group_package','$LEO',null,'wv9');" \
+       "…and the wrapper did not hand anon a way in"                                                                          "permission denied"
+
+# The switch, for turning this on over an existing book of families.
+Q "select set_setting('require_training_waiver','false');" >/dev/null 2>&1 || \
+  Q "update system_settings set value='false' where key='require_training_waiver';" >/dev/null
+# Whatever else this checkout runs into, it is no longer the waiver — which is
+# the whole of what the switch controls.
+assert_absent "select begin_checkout('group_package','$ZARA',(select id from training_groups where slug='u9-foundation'),'wv8')::text;" \
+       "the requirement can be lifted while families are asked to sign"                                                       "waiver"
+Q "update system_settings set value='true' where key='require_training_waiver';" >/dev/null
 echo
 
 echo "RUNNING THE TRAINING SIDE — a season built through the console, not SQL"

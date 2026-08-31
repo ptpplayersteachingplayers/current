@@ -485,6 +485,90 @@ console.log("ADMIN");
 }
 
 console.log("");
+console.log("WAIVERS");
+
+{
+  const { page, problems } = await open("/my-ptp/parent/", "demoFixtures");
+  await page.waitForSelector("#app h1", { timeout: TIMEOUT });
+
+  await check("a child without a waiver is named, not just 'someone'", async () => {
+    const text = await page.textContent("#app");
+    return text.includes("Leo needs a waiver") ? true : "the notice did not name the child";
+  });
+
+  await check("…and a child who has one is not nagged", async () => {
+    const text = await page.textContent("#app");
+    return !text.includes("Tayo needs a waiver") ? true : "the signed child was asked anyway";
+  });
+
+  await check("it says why, in terms of what happens on the field", async () => {
+    const text = await page.textContent("#app");
+    return text.includes("what a coach reads if something happens")
+      ? true : "the reason was missing or was about policy";
+  });
+
+  await check("the form asks for an emergency contact and the three agreements", async () => {
+    await page.click("button:text('Sign it now')");
+    await page.waitForSelector(".sheet", { timeout: TIMEOUT });
+    const sheet = await page.textContent(".sheet");
+    const boxes = await page.$$eval(".sheet .agree input", (n) => n.length);
+    return sheet.includes("Emergency contact") && boxes === 4
+      ? true : `${boxes} agreements, sheet said: ${sheet.slice(0, 120)}`;
+  });
+
+  await check("…and says the media release is optional", async () => {
+    const sheet = await page.textContent(".sheet");
+    return sheet.includes("Optional — training is unaffected")
+      ? true : "the optional one was not marked optional";
+  });
+
+  await check("…and who gets to see what was declared", async () => {
+    const sheet = await page.textContent(".sheet");
+    return sheet.includes("A coach can see") && sheet.includes("nobody else")
+      ? true : "the sheet did not say who can read it";
+  });
+
+  await check("every tick and every field is sent as one waiver", async () => {
+    await page.fill(".sheet input[placeholder='Your full name']", "Simi Adeyemi");
+    await page.fill(".sheet input[placeholder='Who we ring first']", "Femi Adeyemi");
+    await page.fill(".sheet input[placeholder='(215) 555-0100']", "+12155550100");
+    await page.fill(".sheet input[placeholder='Anything a coach must know about on the day']", "Peanuts");
+
+    const inputs = await page.$$(".sheet .agree input");
+    for (const box of inputs.slice(0, 3)) await box.check();   // the required three
+
+    await page.click(".sheet button:text('Sign and save')");
+    await page.waitForFunction(
+      () => (window.__PTP_CALLS__ ?? []).some((c) => c[0] === "record_player_waiver"),
+      null, { timeout: TIMEOUT });
+
+    const sent = await page.evaluate(() =>
+      window.__PTP_CALLS__.find((c) => c[0] === "record_player_waiver")[1]);
+
+    return sent.p_player_id === "p2"
+      && sent.p_details.waiver_agreed === "true"
+      && sent.p_details.medical_auth_agreed === "true"
+      && sent.p_details.conduct_agreed === "true"
+      && sent.p_details.media_release_agreed === "false"
+      && sent.p_details.allergies === "Peanuts"
+      && sent.p_details.emergency_contact_name === "Femi Adeyemi"
+      ? true : `it sent: ${JSON.stringify(sent.p_details)}`;
+  });
+
+  await check("an unticked agreement goes as false, not as absent", async () => {
+    const sent = await page.evaluate(() =>
+      window.__PTP_CALLS__.find((c) => c[0] === "record_player_waiver")[1]);
+    return "media_release_agreed" in sent.p_details
+      ? true : "the untouched box was simply left out";
+  });
+
+  await check("no console error through any of it", () =>
+    problems.length === 0 ? true : problems.join(" | "));
+
+  await page.close();
+}
+
+console.log("");
 console.log("RUNNING THE TRAINING SIDE");
 
 {

@@ -64,7 +64,13 @@ async function draw(root, api, { pollsLeft = 5 } = {}) {
         api.thread().catch(() => null),
         api.contacts().catch(() => []),
       ]);
-    data = { players, bookings, credits, payments, waitlists, pending, camps, thread, contacts };
+
+    // One request per child. A family has two or three, and the alternative is
+    // a screen that says "you cannot book" without saying which child.
+    const waivers = Object.fromEntries(await Promise.all(
+      players.map(async (p) => [p.id, await api.waiverStatus(p.id).catch(() => null)])));
+
+    data = { players, bookings, credits, payments, waitlists, pending, camps, thread, contacts, waivers };
   } catch (error) {
     mount(root, errorBox(error, { onRetry: () => draw(root, api) }));
     return;
@@ -88,6 +94,7 @@ async function draw(root, api, { pollsLeft = 5 } = {}) {
       el("p", { class: "lede", text: data.players.map((p) => p.first_name).join(", ") || "No children on your account yet." }),
 
       ...pendingCards(data.pending, api, root, pollsLeft),
+      ...waiverNotices(data, api, root),
       nextCard(next),
       ...invitations(data.waitlists, api, root),
       creditsCard(credits),
@@ -427,4 +434,131 @@ function paymentCard(payment, api) {
       refunded ? el("p", { class: "figure-label", text: `${money(payment.refunded_cents)} refunded` }) : null,
     ]),
   ]);
+}
+
+// =============================================================================
+// The waiver
+// =============================================================================
+// One per child, not one per booking. A season is sixteen sessions, and asking
+// a parent to agree sixteen times is how you teach somebody to click through
+// the thing you most want them to read.
+//
+// It appears at the top of the family's own screen rather than at checkout,
+// because being stopped at the payment step by a form is the worst place to
+// find out you needed one.
+
+const AGREEMENTS = [
+  ["waiver_agreed", "I understand the risks of football and agree to the PTP waiver.", true],
+  ["medical_auth_agreed", "If my child is hurt and I cannot be reached, PTP may authorise treatment.", true],
+  ["conduct_agreed", "I have read the code of conduct and will support the coaches on the day.", true],
+  ["media_release_agreed", "PTP may use photographs of my child. Optional — training is unaffected.", false],
+];
+
+function waiverNotices(data, api, root) {
+  return data.players.flatMap((player) => {
+    const status = data.waivers?.[player.id];
+    if (!status || (status.signed && !status.expired)) return [];
+
+    const heading = status.expired
+      ? `${player.first_name}'s waiver has expired`
+      : `${player.first_name} needs a waiver`;
+
+    const because = status.expired
+      ? "It lapsed, so it needs signing again before the next session."
+      : "We need this before booking — it is what a coach reads if something happens on the field.";
+
+    const open = el("button", { class: "button", text: "Sign it now" });
+    open.onclick = () => waiverForm(player, api, () => draw(root, api));
+
+    return [el("div", { class: "tile card-overdue" }, [
+      el("p", { class: "section-label", text: "Before booking" }),
+      el("h2", { text: heading }),
+      el("p", { text: because }),
+      el("div", { class: "sheet-actions" }, [open]),
+    ])];
+  });
+}
+
+function waiverForm(player, api, onDone) {
+  const backdrop = el("div", { class: "sheet-backdrop" });
+  const feedback = el("div");
+
+  const text = (placeholder = "") => el("input", { class: "input", placeholder });
+  const fields = {
+    signed_by_name: text("Your full name"),
+    emergency_contact_name: text("Who we ring first"),
+    emergency_contact_phone: el("input", { class: "input", type: "tel", placeholder: "(215) 555-0100" }),
+    second_contact_name: text("Optional"),
+    second_contact_phone: el("input", { class: "input", type: "tel", placeholder: "Optional" }),
+    allergies: text("Anything a coach must know about on the day"),
+    medications: text("Carried or taken during a session"),
+    medical_notes: text("Asthma, a recent injury, anything else"),
+    doctor_name: text("Optional"),
+    doctor_phone: el("input", { class: "input", type: "tel", placeholder: "Optional" }),
+  };
+
+  const boxes = AGREEMENTS.map(([key, label, required]) => {
+    const input = el("input", { type: "checkbox" });
+    input.dataset.key = key;
+    return el("label", { class: "agree" }, [
+      input,
+      el("span", { text: required ? label : `${label}` }),
+    ]);
+  });
+
+  const save = el("button", { class: "button", text: "Sign and save" });
+  save.onclick = busy(save, async () => {
+    mount(feedback);
+
+    const details = Object.fromEntries(
+      Object.entries(fields).map(([key, input]) => [key, input.value.trim()]));
+
+    for (const box of boxes) {
+      const input = box.querySelector("input");
+      details[input.dataset.key] = input.checked ? "true" : "false";
+    }
+
+    try {
+      await api.signWaiver(player.id, details);
+      backdrop.remove();
+      toast(`Thank you — ${player.first_name} is all set.`);
+      onDone();
+    } catch (error) {
+      // The database lists exactly what is missing. Showing that beats a
+      // second copy of the same rules in here that can drift from it.
+      mount(feedback, errorBox(error));
+    }
+  });
+
+  backdrop.append(el("div", { class: "sheet", role: "dialog", "aria-modal": "true" }, [
+    el("h2", { text: `Waiver for ${player.first_name}` }),
+    el("p", { class: "muted", text: "Signed once and good for a year. A coach can see the emergency contact and allergies on the day; nobody else can." }),
+
+    el("p", { class: "section-label", text: "Who is signing" }),
+    field("Your name", fields.signed_by_name),
+
+    el("p", { class: "section-label", text: "If we cannot reach you" }),
+    field("Emergency contact", fields.emergency_contact_name),
+    field("Their phone", fields.emergency_contact_phone),
+    field("Second contact", fields.second_contact_name),
+    field("Their phone", fields.second_contact_phone),
+
+    el("p", { class: "section-label", text: "What a coach should know" }),
+    field("Allergies", fields.allergies),
+    field("Medication", fields.medications),
+    field("Anything else", fields.medical_notes),
+    field("Doctor", fields.doctor_name),
+    field("Doctor's phone", fields.doctor_phone),
+
+    el("p", { class: "section-label", text: "Agreements" }),
+    ...boxes,
+
+    feedback,
+    el("div", { class: "sheet-actions" }, [
+      el("button", { class: "button ghost", text: "Not now", onclick: () => backdrop.remove() }),
+      save,
+    ]),
+  ]));
+
+  document.body.append(backdrop);
 }

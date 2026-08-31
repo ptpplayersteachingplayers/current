@@ -59,12 +59,29 @@ const settings = [
   { key: "free_cancel_hours", value: 24 },
 ];
 
+// Every write the screens make, in order. Reset by resetCalls() between tests.
+export const calls = [];
+export function resetCalls() { calls.length = 0; }
+
+// The waiver rpcs. Tayo is signed, Leo is not, so one screen shows both the
+// notice and its absence.
+const waiverRpc = {
+  player_waiver_status: (args) => (args?.p_player_id === "p2"
+    ? { signed: false, expired: false, expires_on: null }
+    : { signed: true, expired: false, expires_on: "2027-08-01", days_left: 334,
+        signed_by: "Simi Adeyemi", emergency_contact_name: "Femi Adeyemi",
+        emergency_contact_phone: "+12155550100", allergies: "Peanuts", medical_notes: "" }),
+  record_player_waiver: (args) => { calls.push(["record_player_waiver", args]); return "w-new"; },
+};
+
 export const parentFixtures = {
   session: { user: { id: "u1", email: "simi.demo@example.test" }, access_token: "t" },
+  rpc: { ...waiverRpc },
   tables: {
     system_settings: settings,
     players: [
       { id: "p1", first_name: "Tayo", last_name: "Adeyemi", birth_date: "2018-01-04", skill_level: 2, household_id: "h7" },
+      { id: "p2", first_name: "Leo", last_name: "Adeyemi", birth_date: "2020-05-11", skill_level: 1, household_id: "h7" },
     ],
     // Offsets in hours rather than wall-clock days, so both sides of the
     // 24-hour cancellation line are always represented whatever time of day
@@ -283,10 +300,6 @@ export const publicFixtures = {
 
 // An administrator: the same shape as a parent, plus the claim. The claim is
 // what the database checks; nothing about the interface grants it.
-// Every write the screens make, in order. Reset by resetCalls() between tests.
-export const calls = [];
-export function resetCalls() { calls.length = 0; }
-
 export const adminFixtures = {
   ...parentFixtures,
   session: {
@@ -320,6 +333,7 @@ export const adminFixtures = {
   },
 
   rpc: {
+    ...waiverRpc,
     operations_today: () => ({
       escalations: [
         {

@@ -99,3 +99,11 @@ insert into system_settings (key, value, description) values
  'Session reminders, in hours before the start.')
 
 on conflict (key) do nothing;
+
+-- ---- Waivers ---------------------------------------------------------------
+insert into system_settings (key, value, description) values
+  ('require_training_waiver', 'true',
+   'Whether a signed waiver is required before a family can book group or private training. Turning this off is a migration measure, not a policy.'),
+  ('waiver_valid_months', '12',
+   'How long a signed training waiver lasts before it must be signed again.')
+on conflict (key) do nothing;

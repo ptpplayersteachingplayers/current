@@ -409,6 +409,24 @@ export function createApi(client, { functionsBase, timeZone = "America/New_York"
       if (error) throw error;
     },
 
+    // ---- waivers ----------------------------------------------------------
+    // A player, not a booking: a season is sixteen sessions, and asking for the
+    // same agreement sixteen times teaches a parent to click through it.
+
+    async waiverStatus(playerId) {
+      const { data, error } = await client.rpc("player_waiver_status", { p_player_id: playerId });
+      if (error) throw error;
+      return data;
+    },
+
+    async signWaiver(playerId, details) {
+      const { data, error } = await client.rpc("record_player_waiver", {
+        p_player_id: playerId, p_details: details,
+      });
+      if (error) throw error;
+      return data;
+    },
+
     // ---- administration ---------------------------------------------------
     // Every one of these asserts staff inside the database. Nothing here is
     // gated by the interface hiding a button.

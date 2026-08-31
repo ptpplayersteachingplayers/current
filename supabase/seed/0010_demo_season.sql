@@ -194,17 +194,18 @@ on conflict (id) do nothing;
 -- auth_user_id would normally be filled in when the parent registers. The demo
 -- sets it so the row-level security and authorisation checks can be exercised
 -- as a real signed-in parent rather than as the owner of the database.
-insert into contacts (household_id, auth_user_id, first_name, last_name, email, phone, is_primary) values
-  ('55555555-0000-0000-0000-000000000001', '77777777-0000-0000-0000-000000000001', 'Luke',  'Martelli', 'luke.demo@example.test',  '+12155550201', true),
+insert into contacts (household_id, auth_user_id, first_name, last_name, email, phone, is_primary,
+                      sms_consent, sms_consent_at, email_consent, email_consent_at) values
+  ('55555555-0000-0000-0000-000000000001', '77777777-0000-0000-0000-000000000001', 'Luke',  'Martelli', 'luke.demo@example.test',  '+12155550201', true, true, now(), true, now()),
   -- Two parents, one household. The old schema could not express this without
   -- duplicating the children.
-  ('55555555-0000-0000-0000-000000000001', '77777777-0000-0000-0000-000000000002', 'Elena', 'Martelli', 'elena.demo@example.test', '+12155550202', false),
-  ('55555555-0000-0000-0000-000000000002', '77777777-0000-0000-0000-000000000003', 'Mai',   'Nguyen',   'mai.demo@example.test',   '+12155550203', true),
-  ('55555555-0000-0000-0000-000000000003', '77777777-0000-0000-0000-000000000004', 'Chidi', 'Okafor',   'chidi.demo@example.test', '+12155550204', true),
-  ('55555555-0000-0000-0000-000000000004', '77777777-0000-0000-0000-000000000005', 'Aoife', 'Brennan',  'aoife.demo@example.test', '+12155550205', true),
-  ('55555555-0000-0000-0000-000000000005', '77777777-0000-0000-0000-000000000006', 'Rafa',  'Silva',    'rafa.demo@example.test',  '+12155550206', true),
-  ('55555555-0000-0000-0000-000000000006', '77777777-0000-0000-0000-000000000007', 'Kate',  'Hartley',  'kate.demo@example.test',  '+12155550207', true),
-  ('55555555-0000-0000-0000-000000000007', '77777777-0000-0000-0000-000000000008', 'Simi',  'Adeyemi',  'simi.demo@example.test',  '+12155550208', true)
+  ('55555555-0000-0000-0000-000000000001', '77777777-0000-0000-0000-000000000002', 'Elena', 'Martelli', 'elena.demo@example.test', '+12155550202', false, true, now(), true, now()),
+  ('55555555-0000-0000-0000-000000000002', '77777777-0000-0000-0000-000000000003', 'Mai',   'Nguyen',   'mai.demo@example.test',   '+12155550203', true, true, now(), true, now()),
+  ('55555555-0000-0000-0000-000000000003', '77777777-0000-0000-0000-000000000004', 'Chidi', 'Okafor',   'chidi.demo@example.test', '+12155550204', true, true, now(), true, now()),
+  ('55555555-0000-0000-0000-000000000004', '77777777-0000-0000-0000-000000000005', 'Aoife', 'Brennan',  'aoife.demo@example.test', '+12155550205', true, true, now(), true, now()),
+  ('55555555-0000-0000-0000-000000000005', '77777777-0000-0000-0000-000000000006', 'Rafa',  'Silva',    'rafa.demo@example.test',  '+12155550206', true, true, now(), true, now()),
+  ('55555555-0000-0000-0000-000000000006', '77777777-0000-0000-0000-000000000007', 'Kate',  'Hartley',  'kate.demo@example.test',  '+12155550207', true, true, now(), true, now()),
+  ('55555555-0000-0000-0000-000000000007', '77777777-0000-0000-0000-000000000008', 'Simi',  'Adeyemi',  'simi.demo@example.test',  '+12155550208', true, true, now(), true, now())
 on conflict do nothing;
 
 insert into players (id, household_id, first_name, last_name, birth_date, skill_level, club_team, position) values

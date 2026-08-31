@@ -550,6 +550,171 @@ assert_anon "select count(*) from system_settings where key='automation_paused';
        "…and nothing operational"                                                                                           "^0$"
 echo
 
+echo "THE AGENT"
+assert "select normalize_phone('(215) 555-0208') = '+12155550208';" \
+       "a phone number is normalised before it is matched on"                                                               "^t$"
+assert "select normalize_phone('12155550208') = '+12155550208';" \
+       "…however it arrives"                                                                                                "^t$"
+assert "select normalize_phone('+442071234567') = '+442071234567';" \
+       "…and a number it cannot parse is left alone, not guessed at"                                                        "^t$"
+
+assert "select find_contact('+12155550208', null) = (select id from contacts where email='simi.demo@example.test');" \
+       "an inbound text finds the family we already know"                                                                   "^t$"
+assert "select find_or_create_contact('(215) 555-0208', null, 'Simi', 'Adeyemi') = (select id from contacts where email='simi.demo@example.test');" \
+       "…and does not make a second one"                                                                                    "^t$"
+BEFORE_H=$(Q "select count(*) from households;")
+Q "select find_or_create_contact(null, 'SIMI.DEMO@example.test', 'Simi', 'Adeyemi');" >/dev/null
+assert "select count(*) - $BEFORE_H from households;" "…nor when the same family arrives by email in capitals"               "^0$"
+Q "select find_or_create_contact('+12155559999', 'new.parent@example.test', 'New', 'Parent');" >/dev/null
+assert "select count(*) - $BEFORE_H from households;" "a family we have never met gets exactly one household"               "^1$"
+
+INB=$(Q "select record_inbound_message('sms','+12155550208',null,'Is there a camp near 19401?','quo_msg_1');")
+CONV=$(Q "select id from conversations where contact_id=(select id from contacts where email='simi.demo@example.test') limit 1;")
+assert "select record_inbound_message('sms','+12155550208',null,'Is there a camp near 19401?','quo_msg_1')::text;" \
+       "a redelivered inbound message is not answered twice"                                                                '"duplicate": true'
+
+assert "select (agent_context('$CONV')::jsonb) -> 'contact' ->> 'first_name';" \
+       "the agent reads who it is talking to from the database"                                                             "^Simi$"
+assert "select jsonb_array_length((agent_context('$CONV')::jsonb) -> 'players');" \
+       "…and which children they have"                                                                                      "^1$"
+assert "select jsonb_array_length((agent_options_for_player('$TAYO')::jsonb) -> 'groups');" \
+       "…and is only ever offered groups that player is eligible for"                                                       "^[0-9]"
+assert "select ((agent_options_for_player('$TAYO')::jsonb) -> 'groups' -> 0 ->> 'name') like '%U9%';" \
+       "…which for an eight-year-old is the U9 group, not the U14 one"                                                      "^t$"
+
+assert "select must_escalate('He hurt his ankle at training on Tuesday');" \
+       "an injury goes to a person whether or not the model notices"                                                        "^safety$"
+assert "select must_escalate('I want a refund, you charged me twice');" "…so does a disputed charge"                        "^refund$"
+assert "select must_escalate('my lawyer will be in touch');" "…and anything legal"                                          "^legal$"
+assert "select must_escalate('What time does Thursday start?');" "…an ordinary question does not"                           "^$"
+
+assert "select escalate_conversation('$CONV','safety','Parent reported an injury','urgent','Ring them today') is not null;" \
+       "escalating hands the thread to a person"                                                                            "^t$"
+assert "select human_owned from conversations where id='$CONV';" "…and the agent stops talking on it"                       "^t$"
+assert "select queue_outbound_message('$CONV','Just checking in!');" \
+       "…so an automated message on that thread is refused"                                                                 "human owns this conversation"
+echo
+
+echo "CONSENT"
+STOP_CONV=$(Q "select id from conversations where contact_id=(select id from contacts where email='mai.demo@example.test') limit 1;")
+Q "insert into conversations (household_id, contact_id, channel, phone_number)
+   select household_id, id, 'sms', phone from contacts where email='mai.demo@example.test'
+   on conflict do nothing;" >/dev/null
+MAI_CONV=$(Q "select id from conversations where contact_id=(select id from contacts where email='mai.demo@example.test') limit 1;")
+assert "select may_contact((select id from contacts where email='mai.demo@example.test'),'sms',true);" \
+       "a family who agreed can be texted"                                                                                  "^t$"
+Q "select record_inbound_message('sms','+12155550203',null,'STOP','quo_stop_1');" >/dev/null
+assert "select may_contact((select id from contacts where email='mai.demo@example.test'),'sms',true);" \
+       "STOP works, and works immediately"                                                                                  "^f$"
+assert "select unsubscribed_at is not null from contacts where email='mai.demo@example.test';" \
+       "…and is recorded with the moment it happened"                                                                       "^t$"
+assert "select queue_outbound_message('$MAI_CONV','Come back!');" \
+       "…and nothing automated reaches them afterwards"                                                                     "cannot be contacted"
+Q "select record_inbound_message('sms','+12155550203',null,'START','quo_start_1');" >/dev/null
+assert "select may_contact((select id from contacts where email='mai.demo@example.test'),'sms',true);" \
+       "…until they say so themselves"                                                                                       "^t$"
+
+assert "select schedule_followup((select id from households limit 1),'unpaid_link', now(),'bookings',null) is not null;" \
+       "a follow-up can be scheduled"                                                                                       "^t$"
+assert "select schedule_followup((select id from households limit 1),'unpaid_link', now(),'bookings',null) is null;" \
+       "…and scheduling the same one twice does nothing"                                                                    "^t$"
+echo
+
+echo "THE AGENT CANNOT REACH PAST A BROWSER"
+assert_anon "select agent_context('$CONV');"  "a visitor cannot read the agent's view of a family"                          "permission denied"
+assert_anon "select find_or_create_contact('+12155551234', null, 'X', 'Y');" \
+       "…nor create a contact"                                                                                              "permission denied"
+assert_anon "select record_inbound_message('sms','+1','x','y','z');" "…nor inject an inbound message"                       "permission denied"
+assert_as "$MAI" "select agent_context('$CONV');" "a signed-in parent cannot either"                                        "permission denied"
+assert_as "$MAI" "select escalate_conversation('$CONV','safety','x');" "…nor raise an escalation as the agent"              "permission denied"
+echo
+
+echo "FOLLOW-UPS"
+Q "update contacts set sms_consent = true, email_consent = true, unsubscribed_at = null;" >/dev/null
+
+# Quiet hours are real behaviour and are asserted in both directions below, but
+# they must not make the rest of these assertions depend on the hour the suite
+# happens to run at. The window is set explicitly to one that cannot contain
+# now, then to one that must.
+LOCAL_HOUR=$(Q "select extract(hour from (now() at time zone 'America/New_York'))::int;")
+AWAY_START=$(( (LOCAL_HOUR + 2) % 24 ))
+AWAY_END=$(( (LOCAL_HOUR + 3) % 24 ))
+Q "update system_settings set value='$AWAY_START' where key='quiet_hours_start';" >/dev/null
+Q "update system_settings set value='$AWAY_END' where key='quiet_hours_end';" >/dev/null
+
+Q "select begin_checkout('group_dropin','66666666-0000-0000-0000-000000000008',
+     (select s.id from sessions s join training_groups g on g.id=s.group_id
+      where g.slug='u10-development' and s.starts_at>now() order by s.starts_at offset 3 limit 1),'follow-1');" >/dev/null
+Q "select attach_payment_intent((select id from checkout_intents where idempotency_key='follow-1'),'pi_follow');" >/dev/null
+Q "update checkout_intents set created_at = now() - interval '3 hours' where idempotency_key='follow-1';" >/dev/null
+
+assert "select queue_followups() > 0;" "an unpaid payment link earns a follow-up"                                          "^t$"
+BEFORE_F=$(Q "select count(*) from scheduled_followups where state='pending';")
+Q "select queue_followups();" >/dev/null
+assert "select count(*) - $BEFORE_F from scheduled_followups where state='pending';" \
+       "…and running the job again does not queue it twice"                                                                "^0$"
+assert "select send_due_followups() > 0;" "…and it is sent"                                                                "^t$"
+assert "select send_due_followups();" "…once"                                                                              "^0$"
+
+# A family who paid in the meantime must not be chased for not paying. Its own
+# row, so the assertion does not depend on the state left by the one above.
+Q "update checkout_intents set state='settled' where idempotency_key='follow-1';" >/dev/null
+Q "update scheduled_followups set state='pending', sent_at=null, skipped_reason=null
+   where reason='unpaid_link';" >/dev/null
+Q "select send_due_followups();" >/dev/null
+assert "select skipped_reason from scheduled_followups where reason='unpaid_link' limit 1;" \
+       "a family who has since paid is not chased for not paying"                                                          "no longer applies"
+
+# Consent. The follow-up needs a subject that still applies, or it is skipped
+# for that reason before consent is ever reached — so this one gets a real
+# conversation that is genuinely waiting on us.
+Q "insert into conversations (household_id, contact_id, channel, phone_number, state)
+   select household_id, id, 'sms', phone, 'waiting_on_us' from contacts
+   where email='rafa.demo@example.test';" >/dev/null
+WAITING=$(Q "select id from conversations where state='waiting_on_us'
+             and contact_id=(select id from contacts where email='rafa.demo@example.test') limit 1;")
+Q "update conversations set last_message_at = now() - interval '6 hours' where id='$WAITING';" >/dev/null
+Q "select schedule_followup((select household_id from contacts where email='rafa.demo@example.test'),
+     'awaiting_reply', now(), 'conversations', '$WAITING');" >/dev/null
+Q "update contacts set sms_consent=false where email='rafa.demo@example.test';" >/dev/null
+Q "select send_due_followups();" >/dev/null
+assert "select skipped_reason from scheduled_followups where reason='awaiting_reply' limit 1;" \
+       "a family who never agreed to be texted is not texted"                                                              "consent or quiet hours"
+Q "update contacts set sms_consent=true where email='rafa.demo@example.test';" >/dev/null
+
+# And now the window that must contain now.
+Q "update system_settings set value='$LOCAL_HOUR' where key='quiet_hours_start';" >/dev/null
+Q "update system_settings set value='$(( (LOCAL_HOUR + 1) % 24 ))' where key='quiet_hours_end';" >/dev/null
+Q "update scheduled_followups set state='pending', sent_at=null, skipped_reason=null
+   where reason='awaiting_reply';" >/dev/null
+Q "select send_due_followups();" >/dev/null
+assert "select skipped_reason from scheduled_followups where reason='awaiting_reply' limit 1;" \
+       "…and nobody is chased in the middle of the night"                                                                  "consent or quiet hours"
+assert "select may_contact((select id from contacts where email='rafa.demo@example.test'),'sms',true);" \
+       "…but a reminder about a session they booked still goes out"                                                        "^t$"
+Q "update system_settings set value='21' where key='quiet_hours_start';" >/dev/null
+Q "update system_settings set value='8' where key='quiet_hours_end';" >/dev/null
+
+Q "update system_settings set value='true' where key='automation_paused';" >/dev/null
+assert "select queue_followups();" "the pause switch stops the agent chasing anyone"                                        "^0$"
+assert "select send_due_followups();" "…in both directions"                                                                 "^0$"
+Q "update system_settings set value='false' where key='automation_paused';" >/dev/null
+echo
+
+echo "THE CRM VIEW"
+assert "select count(*) > 0 from hubspot_sync_batch(now() - interval '1 day');" \
+       "families that changed are in the sync batch"                                                                        "^t$"
+assert "select count(*) from hubspot_sync_batch(now() + interval '1 day');" \
+       "…and families that did not are not"                                                                                 "^0$"
+assert "select lifetime_spend_cents >= 0 from hubspot_sync_batch(now() - interval '1 day') limit 1;" \
+       "lifetime spend is net of refunds, so it is a number worth trusting"                                                 "^t$"
+assert "select lead_status from hubspot_sync_batch(now() - interval '1 day')
+        where email='simi.demo@example.test';" \
+       "a family with an open escalation is marked as needing attention"                                                    "needs_attention\|customer"
+assert_anon "select count(*) from hubspot_sync_batch(now());" \
+       "a visitor cannot read the CRM view of every family"                                                                 "permission denied"
+echo
+
 echo "============================================================"
 printf "  %d passed, %d failed\n" "$pass" "$fail"
 echo "============================================================"

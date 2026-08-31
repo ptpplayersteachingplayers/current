@@ -181,7 +181,7 @@ console.log("PARENT PORTAL");
   await check("the next session is the soonest one, not the first row", async () => {
     // The fixture lists the further booking first. What the hero shows must
     // match the first card under Coming up, which is the soonest.
-    const hero = await page.textContent(".hero h3");
+    const hero = await page.textContent(".card-inverse h3");
     const first = await page.textContent("h2:text('Coming up') + div .card .meta");
     return hero.includes(first.trim()) ? true : `hero said "${hero}", the list said "${first}"`;
   });

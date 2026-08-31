@@ -108,7 +108,10 @@ begin
                  v_row.place),
           format('reminder:%s:%s', v_row.booking_id, v_hours),
           'ai',
-          jsonb_build_object('booking_id', v_row.booking_id)
+          jsonb_build_object('booking_id', v_row.booking_id),
+          -- Transactional: they booked this session. Quiet hours are for the
+          -- messages we decided to send, not the ones they asked for.
+          true
         );
 
         -- Only count what was actually sent. A de-duplicated call returns the

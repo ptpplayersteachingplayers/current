@@ -75,6 +75,10 @@ async function shot(path, fixtures, file, { route=false, checkout=false, after=n
   `);
   await page.route("https://js.stripe.com/**", r =>
     r.fulfill({ status:200, contentType:"text/javascript", body: STRIPE_STUB }));
+  await page.route("https://fonts.googleapis.com/**", r =>
+    r.fulfill({ status:200, contentType:"text/css", body:"" }));
+  await page.route("https://fonts.gstatic.com/**", r =>
+    r.fulfill({ status:200, contentType:"font/woff2", body:"" }));
   if (route) await page.route("**/functions/v1/catalog*", r =>
     r.fulfill({ status:200, contentType:"application/json", body: JSON.stringify(CATALOG) }));
   if (checkout) await page.route("**/functions/v1/checkout", r =>
@@ -88,24 +92,24 @@ async function shot(path, fixtures, file, { route=false, checkout=false, after=n
 }
 
 const OUT = process.argv[2] ?? "/tmp";
-await shot("/parent/", "demoFixtures", `${OUT}/ptp-parent.png`);
-await shot("/trainer/", "trainerFixtures", `${OUT}/ptp-trainer.png`);
-await shot("/trainer/", "trainerFixtures", `${OUT}/ptp-register.png`, {
+await shot("/my-ptp/parent/", "demoFixtures", `${OUT}/ptp-parent.png`);
+await shot("/my-ptp/trainer/", "trainerFixtures", `${OUT}/ptp-trainer.png`);
+await shot("/my-ptp/trainer/", "trainerFixtures", `${OUT}/ptp-register.png`, {
   after: async p => { await p.click("button:text('Register')"); await p.waitForSelector(".register-row"); },
 });
-await shot("/book/", "demoFixtures", `${OUT}/ptp-book.png`, {
+await shot("/group-training/", "demoFixtures", `${OUT}/ptp-book.png`, {
   route: true,
   after: async p => { await p.selectOption("select", { index: 1 }); await p.waitForTimeout(300); },
 });
 
 // --- booking a package, one screen at a time --------------------------------
 
-await shot("/book/", "demoFixtures", `${OUT}/flow-1-browse.png`, {
+await shot("/group-training/", "demoFixtures", `${OUT}/flow-1-browse.png`, {
   route: true,
   after: async p => { await p.selectOption("select", { index: 1 }); await p.waitForTimeout(250); },
 });
 
-await shot("/book/", "demoFixtures", `${OUT}/flow-2-pay.png`, {
+await shot("/group-training/", "demoFixtures", `${OUT}/flow-2-pay.png`, {
   route: true, checkout: true,
   after: async p => {
     await p.selectOption("select", { index: 1 });
@@ -117,7 +121,7 @@ await shot("/book/", "demoFixtures", `${OUT}/flow-2-pay.png`, {
   },
 });
 
-await shot("/parent/", "demoMidCheckoutFixtures", `${OUT}/flow-3-confirming.png`);
-await shot("/parent/", "demoFixtures", `${OUT}/flow-4-booked.png`);
+await shot("/my-ptp/parent/", "demoMidCheckoutFixtures", `${OUT}/flow-3-confirming.png`);
+await shot("/my-ptp/parent/", "demoFixtures", `${OUT}/flow-4-booked.png`);
 
 await b.close(); s.close();

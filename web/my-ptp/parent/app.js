@@ -136,16 +136,16 @@ function pendingCards(pending, api, root, pollsLeft) {
 
 function nextCard(next) {
   if (!next) {
-    return el("div", { class: "card hero" }, [
+    return el("div", { class: "card card-inverse" }, [
       el("h3", { text: "Nothing booked" }),
-      el("p", { class: "detail", text: "When you book a session it will show up here." }),
+      el("p", { class: "meta", text: "When you book a session it will show up here." }),
     ]);
   }
 
-  return el("div", { class: "card hero" }, [
-    el("p", { class: "detail", text: next.isToday ? "Training today" : "Next session" }),
+  return el("div", { class: "card card-inverse" }, [
+    el("span", { class: "eyebrow", style: "color:#FCB900", text: next.isToday ? "Training today" : "Next session" }),
     el("h3", { text: next.headline }),
-    el("p", { class: "detail", text: next.place }),
+    el("p", { class: "meta", text: next.place }),
   ]);
 }
 

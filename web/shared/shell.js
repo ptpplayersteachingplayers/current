@@ -24,8 +24,8 @@ export function pageHtml({ title, description, module, portal = null }) {
   <link rel="stylesheet" href="/shared/styles.css">
 </head>
 <body>
-  <main id="app">
-    <div class="wrap"><div class="loading"><span class="spinner"></span><span>Loading…</span></div></div>
+  <main id="app"${portal ? ' class="wrap"' : ''}>
+    <div class="loading"><span class="spinner"></span><span>Loading…</span></div>
   </main>
   <script type="module">
     import { mountChrome } from "/shared/chrome.js";

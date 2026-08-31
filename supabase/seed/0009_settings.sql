@@ -80,6 +80,16 @@ insert into system_settings (key, value, description) values
 ('webhook_max_attempts', '5',
  'How many times a failing webhook is released back for the provider to retry before we give up and escalate to a person.'),
 
+-- ---- Messaging -------------------------------------------------------------
+('quiet_hours_start', '21',
+ 'The agent stops sending at this hour, local time. Reminders about a session a family already booked are transactional and go out anyway.'),
+('quiet_hours_end', '8',
+ 'And starts again at this one.'),
+('agent_confidence_threshold', '0.65',
+ 'Below this the agent escalates to a person instead of answering. Deliberately not low: a wrong answer about a child costs more than a slow one.'),
+('agent_max_messages_per_day', '4',
+ 'How many times the agent may message one family in a day before it stops and asks a person whether to continue.'),
+
 -- ---- Automation ------------------------------------------------------------
 ('automation_paused', 'false',
  'THE BIG SWITCH. When true, every scheduled job and every outbound AI message stops. Set this first during an incident.'),

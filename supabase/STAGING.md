@@ -13,8 +13,9 @@ registrations throughout.
 
 You need three things:
 
-1. **A Supabase project.** Free tier is fine. From Project Settings → Database,
-   copy the connection string.
+1. **A Supabase project.** Free tier is fine. Click **Connect** in the project
+   header and copy the **Session pooler** string — port 5432, not the
+   transaction pooler on 6543. Migrations need session mode.
 2. **Stripe test-mode keys.** Not live keys. The secret key and, after step 4,
    the webhook signing secret.
 3. **The Supabase CLI.** `npm i -g supabase`, then `supabase login`.
@@ -29,7 +30,7 @@ it, and this is the hour that proves it.
 
 ```bash
 cd supabase
-./stage.sh "postgresql://postgres:PASSWORD@db.PROJECT.supabase.co:5432/postgres"
+./stage.sh "postgresql://postgres.yzxcfetglsbaklpburmb:PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres"
 ```
 
 That applies nineteen migrations and the demo season: six groups in different
@@ -44,6 +45,21 @@ different states, computed by the database rather than typed in.
 **If it fails**, it fails on one file and stops. The error names the file and
 the line. The most likely candidate is a permissions difference between your
 project and a bare Postgres; send me the error.
+
+### No CLI? Paste it instead
+
+`./bundle.sh` splits the same SQL into six parts sized for the dashboard's SQL
+editor, written to `dist/`. Open **SQL Editor** in the project, paste
+`staging-part-1.sql`, run it, and only then move to part 2. The parts must run
+in order and each must finish before the next starts.
+
+They are forward-only, like the migrations they contain — running a part twice
+fails on the first `CREATE TYPE`. If you need to start over, reset the database
+rather than re-running a part.
+
+This route works, but `stage.sh` is better where you can use it: it stops at
+the first failure and names the file, where a paste of six files tells you only
+that something in the middle went wrong.
 
 ---
 
@@ -64,6 +80,7 @@ a hosted Postgres differs most.
 ## 3. Deploy the functions — 10 minutes
 
 ```bash
+supabase link --project-ref yzxcfetglsbaklpburmb
 cp .env.staging.example .env.staging   # fill in the Stripe test keys
 supabase secrets set --env-file .env.staging
 supabase functions deploy
@@ -73,7 +90,7 @@ Eight platform functions deploy. The agent module's four are not in
 `functions/` unless you ran `modules/agent/install.sh install`, which is the
 point of it being a module.
 
-**What to check.** `curl https://PROJECT.supabase.co/functions/v1/catalog` with
+**What to check.** `curl https://yzxcfetglsbaklpburmb.supabase.co/functions/v1/catalog` with
 your anon key returns the six groups as JSON. That is the first time any of
 this code has executed. If it 500s, the log in the Supabase dashboard will say
 why, and it will most likely be a column name.
@@ -89,7 +106,7 @@ This is the step that matters. Everything before it is preparation.
    and start a checkout.
 3. Pay with `4242 4242 4242 4242`, any future expiry, any CVC.
 4. Point the Stripe webhook at
-   `https://PROJECT.supabase.co/functions/v1/stripe-webhook` and put the
+   `https://yzxcfetglsbaklpburmb.supabase.co/functions/v1/stripe-webhook` and put the
    signing secret into your secrets.
 
 **What to check, in this order:**

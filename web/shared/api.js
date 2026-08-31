@@ -288,6 +288,57 @@ export function createApi(client, { functionsBase, timeZone = "America/New_York"
       return data ?? [];
     },
 
+    // The family's own thread. RLS returns their conversations and nothing
+    // else, so there is no household filter here to forget.
+    async thread() {
+      const { data: conversations, error } = await client
+        .from("conversations")
+        .select("id, channel, state, last_message_at, human_owned")
+        .order("last_message_at", { ascending: false, nullsFirst: false })
+        .limit(1);
+
+      if (error) throw error;
+      if (!conversations?.length) return { conversation: null, messages: [] };
+
+      const { data: messages, error: messageError } = await client
+        .from("messages")
+        .select("id, direction, sender_kind, body, created_at, channel")
+        .eq("conversation_id", conversations[0].id)
+        .order("created_at");
+
+      if (messageError) throw messageError;
+      return { conversation: conversations[0], messages: messages ?? [] };
+    },
+
+    async sendMessage(conversationId, body) {
+      const { error } = await client.from("messages").insert({
+        conversation_id: conversationId,
+        direction: "inbound",
+        sender_kind: "parent",
+        body,
+      });
+      if (error) throw error;
+    },
+
+    async household_() {
+      const { data, error } = await client
+        .from("households")
+        .select("id, display_name")
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+
+    async contacts() {
+      const { data, error } = await client
+        .from("contacts")
+        .select("id, first_name, last_name, email, phone, is_primary, sms_consent, email_consent")
+        .order("is_primary", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+
     async waitlistPlaces() {
       const { data, error } = await client
         .from("waitlists")

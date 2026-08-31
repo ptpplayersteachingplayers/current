@@ -26,6 +26,35 @@ rule, it is repeating one it was told:
 
 Grep for a hardcoded price or capacity in here and you should find none.
 
+## The spacing and box system
+
+An audit of the first version measured it rather than looked at it, and found:
+
+- **24 fully enclosed boxes** on the homepage. Square corners plus a 2px border
+  is a strong device, and applying it to every group of text turns a page into
+  a filing cabinet — nothing recedes, nothing leads.
+- **Eleven different gap values** between 0 and 28px, from inline pixel margins
+  scattered through every module. That is what "no scale" looks like from the
+  outside.
+- **154-character lines** on the policies page at desktop width, more than
+  twice a readable measure.
+
+What replaced it:
+
+**One scale.** `--s1` to `--s10` (4, 8, 12, 16, 24, 32, 48, 64, 96, 128). There
+are spacing utilities (`.mt-4`, `.stack`) and deliberately no way to express a
+gap that is not on the scale. No module sets a pixel margin inline.
+
+**The border is rationed.** It marks things you can *act on* — a button, an
+input, a table, a camp you can register for. A `.card` is a row of related text
+separated by space and a hairline. A `.tile` is an object, and there are few of
+them on any screen, which is what makes them mean something.
+
+**Prose stops at 66 characters**, whatever the column is doing.
+
+All three are assertions in `tests/browser.test.mjs`, measured in the browser at
+390px and 1280px on three pages, so none of them can quietly come back.
+
 ## Why plain JavaScript
 
 These load on a phone at the side of a pitch, on one bar. The whole of
@@ -47,8 +76,8 @@ ships to every browser that loads the site.
 ## Tests
 
 ```bash
-node web/tests/derive.test.mjs     # 61 assertions, pure logic
-node web/tests/browser.test.mjs    # 36 assertions, real Chromium
+node web/tests/derive.test.mjs     # 77 assertions, pure logic
+node web/tests/browser.test.mjs    # 86 assertions, real Chromium
 ```
 
 The browser tests serve the actual pages and load them in Chromium with a

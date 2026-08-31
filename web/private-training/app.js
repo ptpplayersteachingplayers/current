@@ -59,13 +59,13 @@ export async function start(root) {
         ? empty("No private sessions are open at the moment.",
                 "They open as group blocks are confirmed. Message us and we will tell you when one fits.")
         : el("div", {}, byDay(slots, api).map(([day, list]) =>
-            el("div", { style: "margin-bottom:28px" }, [
+            el("div", { class: "mb-6" }, [
               el("h3", { text: day }),
               el("div", { class: "grid grid-2" },
                 list.map((slot) => slotCard(slot, api, state, user, players))),
             ]))),
 
-      user ? null : el("div", { class: "card", style: "margin-top:24px" }, [
+      user ? null : el("div", { class: "card mt-5" }, [
         el("h3", { text: "Sign in to book" }),
         signInView(api, { heading: "Your PTP account", note: "One account for the whole family." }),
       ]),
@@ -88,7 +88,7 @@ function playerPicker(players, state, rerender) {
     rerender();
   });
 
-  return el("div", { class: "card", style: "margin-bottom:24px" }, [field("Booking for", select)]);
+  return el("div", { class: "card mb-5" }, [field("Booking for", select)]);
 }
 
 function byDay(slots, api) {
@@ -151,9 +151,9 @@ function slotCard(slot, api, state, user, players) {
     // otherwise is how a Saturday gets cancelled on someone.
     slot.joins_existing_work
       ? null
-      : el("p", { class: "notice", style: "margin-top:14px",
+      : el("p", { class: "notice mt-4",
                   text: "This is the first session of the day. Your time is held either way — the block is confirmed once a second family books alongside you, and we tell you the moment it is." }),
 
-    el("div", { style: "margin-top:14px" }, [book]),
+    el("div", { class: "mt-4" }, [book]),
   ]);
 }

@@ -65,7 +65,7 @@ function filters(state, onSearch) {
     el("option", { value: "half_day", selected: state.dayOption === "half_day", text: "Half day" }),
   ]);
 
-  const form = el("form", { class: "card" }, [
+  const form = el("form", { class: "tile" }, [
     el("div", { class: "field-row" }, [field("ZIP code", zip), field("Within", radius)]),
     el("div", { class: "field-row" }, [field("State", us), field("Player age", age)]),
     field("Full or half day", day),
@@ -128,7 +128,7 @@ async function search(api, state) {
   }
 
   mount(host,
-    el("p", { class: "meta", style: "margin:24px 0 12px",
+    el("p", { class: "meta mt-5 mb-3",
               text: `${camps.length} camp${camps.length === 1 ? "" : "s"}${state.zip ? `, nearest first` : ""}` }),
     el("div", { class: "grid grid-2" }, camps.map((camp) => resultCard(campSummary(camp)))),
   );
@@ -142,7 +142,7 @@ function resultCard(camp) {
     none: null,
   }[camp.action];
 
-  return el("article", { class: "card" }, [
+  return el("article", { class: "tile" }, [
     el("div", { class: "card-row" }, [
       el("div", {}, [
         el("h3", { text: `${camp.city}, ${camp.state}` }),
@@ -151,7 +151,7 @@ function resultCard(camp) {
       badge(statusLabel(camp), statusTone(camp)),
     ]),
 
-    el("table", { style: "margin-top:14px" }, [
+    el("table", { class: "mt-4" }, [
       el("tbody", {}, [
         row("Dates", camp.date_range),
         row("Hours", camp.daily_hours),
@@ -164,13 +164,12 @@ function resultCard(camp) {
       ]),
     ]),
 
-    el("div", { style: "display:flex;margin-top:16px" }, [
-      el("a", { class: "button ghost", href: `/camp/?c=${camp.slug}`, style: "flex:1", text: "Details" }),
+    el("div", { class: "button-join mt-4" }, [
+      el("a", { class: "button ghost", href: `/camp/?c=${camp.slug}`, text: "Details" }),
       actions
         ? el("a", {
             class: `button ${actions[1]}`,
             href: `/camp/?c=${camp.slug}#register`,
-            style: "flex:1;margin-left:-2px",
             text: actions[0],
           })
         : null,
@@ -216,7 +215,7 @@ function interestSection() {
   ]);
   const status = el("div");
 
-  const form = el("form", { class: "card" }, [
+  const form = el("form", { class: "tile" }, [
     el("div", { class: "field-row" }, [field("Your name", parent), field("Email", email)]),
     el("div", { class: "field-row" }, [field("Mobile", phone), field("ZIP code", zip)]),
     el("div", { class: "field-row" }, [field("Player name", player), field("Player age", playerAge)]),

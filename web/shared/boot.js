@@ -15,10 +15,17 @@ export async function boot() {
   // it, which nothing in production does.
   const injected = globalThis.__PTP_TEST_CLIENT__;
 
-  const client = injected ?? (await import(SUPABASE_CDN)).createClient(
-    config.supabaseUrl,
-    config.supabaseAnonKey,
-    { auth: { persistSession: true, autoRefreshToken: true } },
+  // A hanging script tag is indistinguishable from a broken page. Ten seconds
+  // is long enough for a bad connection and short enough that somebody on a
+  // platform gets an answer rather than a spinner.
+  const client = injected ?? await withTimeout(
+    import(SUPABASE_CDN).then(({ createClient }) => createClient(
+      config.supabaseUrl,
+      config.supabaseAnonKey,
+      { auth: { persistSession: true, autoRefreshToken: true } },
+    )),
+    10_000,
+    "Could not load the booking system",
   );
 
   const api = createApi(client, {
@@ -39,6 +46,13 @@ export async function boot() {
   }
 
   return api;
+}
+
+function withTimeout(promise, ms, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ]);
 }
 
 // system_settings.value is jsonb, so a string setting arrives as '"America/New_York"'

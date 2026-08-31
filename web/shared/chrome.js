@@ -236,16 +236,38 @@ export function footer() {
 }
 
 // Portal pages get the four-tab bottom bar instead of the marketing action bar.
-export function portalNav(active) {
-  const tabs = active === "trainer"
-    ? [["Today", "/my-ptp/trainer/"], ["Schedule", "/my-ptp/trainer/#schedule"],
-       ["Messages", "/my-ptp/trainer/#messages"], ["Pay", "/my-ptp/trainer/#pay"]]
-    : [["Home", "/my-ptp/parent/"], ["Schedule", "/my-ptp/parent/#schedule"],
-       ["Messages", "/my-ptp/parent/#messages"], ["Account", "/my-ptp/parent/#account"]];
+// The four tabs, and the view each one shows. The href is a hash so the tab a
+// parent is on survives a reload and can be linked to — and so that a tab
+// which does nothing is impossible to ship: the portal reads the hash to
+// decide what to render.
+export const PORTAL_TABS = {
+  parent: [["Home", "home"], ["Schedule", "schedule"], ["Messages", "messages"], ["Account", "account"]],
+  trainer: [["Today", "home"], ["Schedule", "schedule"], ["Messages", "messages"], ["Pay", "pay"]],
+};
 
-  return el("nav", { class: "portal-nav", "aria-label": "Portal" },
-    tabs.map(([label, href], index) =>
-      el("a", { href, text: label, ...(index === 0 ? { "aria-current": "page" } : {}) })));
+export function portalNav(role) {
+  const base = role === "trainer" ? "/my-ptp/trainer/" : "/my-ptp/parent/";
+  const current = (location.hash || "#home").slice(1);
+
+  const nav = el("nav", { class: "portal-nav", "aria-label": "Portal" },
+    PORTAL_TABS[role === "trainer" ? "trainer" : "parent"].map(([label, key]) =>
+      el("a", {
+        href: `${base}#${key}`,
+        text: label,
+        ...(key === current || (key === "home" && !location.hash) ? { "aria-current": "page" } : {}),
+      })));
+
+  // Keep the marker on the tab you are actually looking at.
+  addEventListener("hashchange", () => {
+    const now = (location.hash || "#home").slice(1);
+    for (const link of nav.querySelectorAll("a")) {
+      const key = link.getAttribute("href").split("#")[1];
+      if (key === now) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    }
+  });
+
+  return nav;
 }
 
 // Called once per page. Everything above is assembled here so a page's own

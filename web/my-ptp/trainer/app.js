@@ -34,7 +34,20 @@ export async function start(root) {
 
   const render = () => draw(root, api, state);
   api.auth.onChange(render);
+
+  // The bottom bar moves between views rather than scrolling to anchors that
+  // do not exist. Leaving the register is a hash change too, so the back
+  // button works the way a phone's back button is expected to.
+  addEventListener("hashchange", () => {
+    if (state.view === "register") state.view = "day";
+    render();
+  });
+
   await render();
+}
+
+function tab() {
+  return (location.hash || "#home").slice(1);
 }
 
 async function draw(root, api, state) {
@@ -79,26 +92,79 @@ async function draw(root, api, state) {
     .sort()
     .slice(0, 7);
 
-  mount(
-    root,
-    el("h1", { text: plan.label }),
-    el("p", { class: "lede", text: date(`${state.day}T12:00:00Z`, "UTC") }),
+  const views = {
+    home: () => [
+      el("h1", { text: plan.label }),
+      el("p", { class: "lede", text: date(`${state.day}T12:00:00Z`, "UTC") }),
 
-    dayPicker(upcomingDays, state, api, () => draw(root, api, state)),
-    plan.warning ? el("div", { class: "notice", text: plan.warning }) : null,
-    shiftCard(plan, api, () => draw(root, api, state)),
+      dayPicker(upcomingDays, state, api, () => draw(root, api, state)),
+      plan.warning ? el("div", { class: "notice", text: plan.warning }) : null,
+      shiftCard(plan, api, () => draw(root, api, state)),
 
-    plan.items.length === 0
-      ? empty("Nothing scheduled.", "Days you are booked appear above.")
-      : el("div", { class: "card" }, plan.items.map((item) => planRow(item, api, state, root))),
+      plan.items.length === 0
+        ? empty("Nothing scheduled.", "Days you are booked appear above.")
+        : el("div", {}, plan.items.map((item) => planRow(item, api, state, root))),
+    ],
 
-    el("h2", { text: "Hours" }),
-    hoursTable(hours, api),
+    schedule: () => [
+      el("h1", { text: "Schedule" }),
+      el("p", { class: "lede", text: "The next four weeks, as blocks rather than as a list of sessions." }),
+      ...weekPlan(sessions, shifts, api, state, root),
+    ],
 
-    el("p", { class: "meta" }, [
-      el("button", { class: "link", text: "Sign out", onclick: () => api.auth.signOut() }),
-    ]),
-  );
+    messages: () => [
+      el("h1", { text: "Messages" }),
+      el("p", { class: "lede", text: "Anything to do with a family goes through the office, not directly — so a parent hears one voice." }),
+      el("div", { class: "card" }, [
+        el("h3", { text: "Report a problem with a field" }),
+        el("p", { class: "meta", text: "Locked gate, waterlogged pitch, nobody to let you in. Tell the office and they will move the session and message the families." }),
+        el("a", { class: "button primary mt-4", href: "/contact/", text: "Message the office" }),
+      ]),
+      el("div", { class: "card" }, [
+        el("h3", { text: "Something about a player" }),
+        el("p", { class: "meta", text: "Injuries and anything to do with safety go in the register as a note — those reach the parent, and they reach a person here straight away." }),
+      ]),
+    ],
+
+    pay: () => [
+      el("h1", { text: "Pay" }),
+      el("p", { class: "lede", text: "Paid by the scheduled hour. Once a block is confirmed you are paid for its length, whoever turns up." }),
+      hoursTable(hours, api),
+      el("div", { class: "mt-7" }, [
+        el("button", { class: "button ghost", text: "Sign out", onclick: () => api.auth.signOut() }),
+      ]),
+    ],
+  };
+
+  mount(root, ...(views[tab()] ?? views.home)());
+}
+
+// The month ahead, grouped by day, so a trainer can see which weekends are
+// committed and which are still empty.
+function weekPlan(sessions, shifts, api, state, root) {
+  const days = [...new Set(sessions
+    .filter((s) => s.status !== "canceled" && new Date(s.starts_at) > new Date())
+    .map((s) => dayKey(s.starts_at, api.timeZone)))].sort();
+
+  if (days.length === 0) {
+    return [empty("Nothing booked in the next four weeks.",
+                  "Blocks appear here as soon as they are confirmed.")];
+  }
+
+  return days.map((day) => {
+    const plan = dayPlan(sessions, shifts, { timeZone: api.timeZone, now: new Date(), day });
+
+    return el("div", { class: "card" }, [
+      el("div", { class: "card-row" }, [
+        el("div", {}, [
+          el("h3", { text: date(`${day}T12:00:00Z`, "UTC") }),
+          el("p", { class: "meta", text: `${plural(plan.sessionCount, "session")}${plan.blockHours ? ` · ${plan.blockHours} hour block` : ""}` }),
+        ]),
+        plan.payCents !== null ? el("p", { class: "figure", text: money(plan.payCents) }) : null,
+      ]),
+      plan.warning ? el("p", { class: "notice", text: plan.warning }) : null,
+    ]);
+  });
 }
 
 function dayPicker(days, state, api, rerender) {
@@ -293,7 +359,7 @@ function hoursTable(hours, api) {
         el("p", { class: "figure-label", text: "awaiting payout" }),
       ]),
     ]),
-    el("h3", { style: "margin-top:14px", text: "Recent days" }),
+    el("h3", { class: "mt-4", text: "Recent days" }),
     ...hours.slice(0, 10).map((h) =>
       el("div", { class: "register-row" }, [
         el("span", { class: "register-name", text: h.worked_on }),

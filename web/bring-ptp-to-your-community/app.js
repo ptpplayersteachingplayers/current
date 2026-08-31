@@ -71,17 +71,17 @@ export async function start(root) {
         el("div", { class: "grid grid-2" }, [
           el("div", {}, [
             el("h2", { text: "What we bring" }),
-            el("ul", { style: "padding-left:18px" }, [
-              el("li", { style: "margin-bottom:8px", text: "Current college and professional players as coaches" }),
-              el("li", { style: "margin-bottom:8px", text: "Session plans by age and level" }),
-              el("li", { style: "margin-bottom:8px", text: "Equipment, bibs and goals" }),
-              el("li", { style: "margin-bottom:8px", text: "Insurance and background-checked staff" }),
-              el("li", { style: "margin-bottom:8px", text: "Registration and payment handled by us" }),
+            el("ul", {}, [
+              el("li", { text: "Current college and professional players as coaches" }),
+              el("li", { text: "Session plans by age and level" }),
+              el("li", { text: "Equipment, bibs and goals" }),
+              el("li", { text: "Insurance and background-checked staff" }),
+              el("li", { text: "Registration and payment handled by us" }),
             ]),
-            el("h2", { style: "margin-top:24px", text: "What you bring" }),
-            el("ul", { style: "padding-left:18px" }, [
-              el("li", { style: "margin-bottom:8px", text: "A field we can be permitted on" }),
-              el("li", { style: "margin-bottom:8px", text: "A group of players, or a way of reaching them" }),
+            el("h2", { class: "mt-5", text: "What you bring" }),
+            el("ul", {}, [
+              el("li", { text: "A field we can be permitted on" }),
+              el("li", { text: "A group of players, or a way of reaching them" }),
             ]),
           ]),
           form,

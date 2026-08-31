@@ -29,12 +29,16 @@ export function pageHtml({ title, description, module, portal = null }) {
   </main>
   <script type="module">
     import { mountChrome } from "/shared/chrome.js";
+    import { offlineView } from "/shared/offline.js";
     import { start } from "${module}";
+
+    // The chrome first, and separately: a page that cannot load its data
+    // should still have a header, a menu and a way out.
     ${nav}
+
     start(document.querySelector("#app")).catch((error) => {
-      document.querySelector("#app").textContent =
-        "We could not reach PTP just now. Please try again in a moment.";
       console.error(error);
+      offlineView(document.querySelector("#app"));
     });
   </script>
 </body>

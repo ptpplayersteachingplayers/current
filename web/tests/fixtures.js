@@ -88,6 +88,16 @@ export const parentFixtures = {
       },
     ],
     checkout_intents: [],
+    conversations: [
+      { id: "cv1", channel: "sms", state: "open", human_owned: false, last_message_at: inHours(-2) },
+    ],
+    messages: [
+      { id: "m1", conversation_id: "cv1", direction: "inbound", sender_kind: "parent",
+        body: "Is there a camp near 19401 in June?", created_at: inHours(-3), channel: "sms" },
+      { id: "m2", conversation_id: "cv1", direction: "outbound", sender_kind: "ai",
+        body: "Norristown, week of 21 June, ages 6–14, 9am to 3pm. 54 places left. Want the link?",
+        created_at: inHours(-2), channel: "sms" },
+    ],
     waitlists: [
       {
         id: "w1", state: "invited", position: 1,

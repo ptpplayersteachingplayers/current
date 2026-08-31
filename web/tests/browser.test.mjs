@@ -201,8 +201,8 @@ console.log("PARENT PORTAL");
     return !coming.includes("attended") ? true : "an attended session appeared in Coming up";
   });
 
-  await check("a payment is shown at the amount charged", () =>
-    body.includes("$560") ? true : "the payment was not shown");
+  await check("the home tab leads with what is next, not with a ledger", () =>
+    !body.includes("Season package") ? true : "the payment history is on the home tab");
 
   await page.close();
 }
@@ -244,6 +244,54 @@ console.log("PARENT PORTAL");
   await check("a signed-out visitor gets a sign-in form and no family data", async () => {
     const body = await page.textContent("body");
     return !body.includes("Tayo") ? true : "a signed-out page leaked a name";
+  });
+
+  await page.close();
+}
+
+{
+  // Four tabs in the bottom bar, and every one of them has to go somewhere.
+  // Three of them used to be anchors to nothing.
+  const { page } = await open("/my-ptp/parent/", "parentFixtures");
+  await page.waitForSelector("#app h1");
+
+  await check("the schedule tab lists everything booked", async () => {
+    await page.click(".portal-nav a:text('Schedule')");
+    await page.waitForFunction(() => document.querySelector("#app h1")?.textContent === "Schedule",
+      null, { timeout: TIMEOUT });
+    const text = await page.textContent("#app");
+    return text.includes("Coming up") && text.includes("Sessions so far")
+      ? true : "the schedule was empty";
+  });
+
+  await check("the messages tab shows the thread and a way to reply", async () => {
+    await page.click(".portal-nav a:text('Messages')");
+    await page.waitForFunction(() => document.querySelector("#app h1")?.textContent === "Messages",
+      null, { timeout: TIMEOUT });
+    const box = await page.$("#app textarea");
+    return box !== null ? true : "no way to reply";
+  });
+
+  await check("the account tab holds the payments and the consent", async () => {
+    await page.click(".portal-nav a:text('Account')");
+    await page.waitForFunction(() => document.querySelector("#app h1")?.textContent === "Account",
+      null, { timeout: TIMEOUT });
+    const text = await page.textContent("#app");
+    return text.includes("$560") && text.includes("Reply STOP")
+      ? true : "payments or consent were missing";
+  });
+
+  await check("…and the tab you are on is the one marked", async () => {
+    const current = await page.$$eval('.portal-nav a[aria-current="page"]', (n) => n.map((a) => a.textContent));
+    return JSON.stringify(current) === JSON.stringify(["Account"])
+      ? true : `marked: ${JSON.stringify(current)}`;
+  });
+
+  await check("the tab survives a reload, so it can be linked to", async () => {
+    await page.reload({ waitUntil: "load" });
+    await page.waitForSelector("#app h1");
+    const heading = await page.textContent("#app h1");
+    return heading === "Account" ? true : `it reloaded on ${heading}`;
   });
 
   await page.close();
@@ -330,6 +378,39 @@ console.log("TRAINER PORTAL");
     await page.click("button:text('Back to the day')");
     await page.waitForSelector(".plan-item");
     return true;
+  });
+
+  await page.close();
+}
+
+{
+  const { page } = await open("/my-ptp/trainer/", "trainerFixtures");
+  await page.waitForSelector("#app h1");
+
+  await check("the trainer's schedule tab shows the month as blocks", async () => {
+    await page.click(".portal-nav a:text('Schedule')");
+    await page.waitForFunction(() => document.querySelector("#app h1")?.textContent === "Schedule",
+      null, { timeout: TIMEOUT });
+    const text = await page.textContent("#app");
+    return text.includes("hour block") || text.includes("Nothing booked")
+      ? true : "the schedule showed neither blocks nor an empty state";
+  });
+
+  await check("the pay tab shows what is owed and what is paid", async () => {
+    await page.click(".portal-nav a:text('Pay')");
+    await page.waitForFunction(() => document.querySelector("#app h1")?.textContent === "Pay",
+      null, { timeout: TIMEOUT });
+    const text = await page.textContent("#app");
+    return text.includes("awaiting payout") && text.includes("paid for its length")
+      ? true : "the pay promise or the total was missing";
+  });
+
+  await check("the messages tab routes a field problem to the office", async () => {
+    await page.click(".portal-nav a:text('Messages')");
+    await page.waitForFunction(() => document.querySelector("#app h1")?.textContent === "Messages",
+      null, { timeout: TIMEOUT });
+    const text = await page.textContent("#app");
+    return text.includes("Locked gate") ? true : "no route for a field problem";
   });
 
   await page.close();
@@ -599,6 +680,143 @@ console.log("NAVIGATION");
     return actions.length === 2 && actions[0] === "Find a Camp" && actions[1] === "Book Training"
       ? true
       : `it carried: ${JSON.stringify(actions)}`;
+  });
+
+  await page.close();
+}
+
+console.log("");
+console.log("THE DESIGN SYSTEM, MEASURED");
+
+// These are the audit that produced the current spacing system, kept as
+// assertions so its findings cannot quietly come back. The first version
+// scored twenty-four enclosed boxes on the homepage, eleven different gap
+// values with no scale, and 154-character lines.
+async function measure(page) {
+  return await page.evaluate(() => {
+    const vis = [...document.querySelectorAll("main *")]
+      .filter((n) => n.offsetParent !== null && n.getBoundingClientRect().height > 0);
+
+    const CONTROL = new Set(["BUTTON", "INPUT", "SELECT", "TEXTAREA", "TABLE", "TH", "TD", "A"]);
+
+    const enclosed = vis.filter((n) => {
+      if (CONTROL.has(n.tagName)) return false;
+      if (n.classList.contains("badge") || n.classList.contains("mark")) return false;
+      if (n.classList.contains("tile")) return false;      // deliberate objects
+      const c = getComputedStyle(n);
+      return ["borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth"]
+        .every((k) => parseFloat(c[k]) >= 1);
+    });
+
+    const gaps = new Set();
+    for (const parent of vis) {
+      const kids = [...parent.children]
+        .filter((k) => k.offsetParent !== null && k.getBoundingClientRect().height > 4);
+      for (let i = 1; i < kids.length; i++) {
+        // A tile's last child is pushed to the bottom by `margin-top: auto`, so
+        // a row of tiles has its buttons on one line. The gap is whatever is
+        // left over — a deliberate fill, not a chosen value, and measuring it
+        // against the scale would be measuring the wrong thing. (getComputedStyle
+        // resolves auto to pixels, so the tile is what identifies it.)
+        if (parent.classList.contains("tile") && i === kids.length - 1) continue;
+
+        const a = kids[i - 1].getBoundingClientRect();
+        const z = kids[i].getBoundingClientRect();
+        const g = Math.round(z.top - a.bottom);
+        if (g > 0 && g < 200) gaps.add(g);
+      }
+    }
+
+    const overlong = vis
+      .filter((n) => n.tagName === "P" && n.textContent.trim().length > 90)
+      .map((p) => Math.round(p.getBoundingClientRect().width / (parseFloat(getComputedStyle(p).fontSize) * 0.5)))
+      .filter((chars) => chars > 80);
+
+    const sizes = [...new Set(vis.map((n) => parseFloat(getComputedStyle(n).fontSize)))].sort((a, z) => a - z);
+
+    return { enclosed: enclosed.length, gaps: [...gaps].sort((a, z) => a - z), overlong, sizes };
+  });
+}
+
+// The scale from styles.css. A gap that is not one of these is an ad-hoc
+// margin, which is what "no system" looks like from the outside.
+const SCALE = [4, 8, 12, 16, 24, 32, 48, 64, 96, 128];
+
+for (const [path, label, routes] of [
+  ["/", "homepage", [catalogRoute]],
+  ["/policies/", "a page of prose", []],
+  ["/find-a-camp/", "the finder", []],
+]) {
+  const { page } = await open(path, "parentFixtures", { routes });
+  await page.waitForSelector("#app h1");
+
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.waitForTimeout(150);
+    const m = await measure(page);
+
+    await check(`${label} @ ${width}px — no prose is wrapped in a box`, () =>
+      m.enclosed === 0 ? true : `${m.enclosed} enclosed containers`);
+
+    await check(`${label} @ ${width}px — every gap is on the spacing scale`, () => {
+      const off = m.gaps.filter((g) => !SCALE.includes(g));
+      return off.length === 0 ? true : `off-scale gaps: ${off.join(", ")}`;
+    });
+
+    await check(`${label} @ ${width}px — nothing runs past 80 characters a line`, () =>
+      m.overlong.length === 0 ? true : `line lengths: ${m.overlong.join(", ")}`);
+  }
+
+  await page.close();
+}
+
+console.log("");
+console.log("WHEN WE CANNOT BE REACHED");
+
+// The state a parent is most likely to hit and least likely to be designed
+// for. The first version of this printed one unstyled sentence into an empty
+// page: no gutter, no way back, no way to reach a person.
+{
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  page.setDefaultTimeout(TIMEOUT);
+
+  // No Supabase client injected, and the CDN refused — exactly what a bad
+  // connection looks like from the page's side.
+  await page.route("https://esm.sh/**", (route) => route.abort());
+  await page.route("https://fonts.googleapis.com/**", (route) =>
+    route.fulfill({ status: 200, contentType: "text/css", body: "" }));
+
+  await page.goto(`${base}/find-a-camp/`, { waitUntil: "load" });
+  await page.waitForSelector("#app h1", { timeout: 15_000 });
+
+  const body = await page.textContent("body");
+
+  await check("a page that cannot load its data still renders a page", () =>
+    body.includes("We cannot load this right now")
+      ? true
+      : `it showed: ${body.slice(0, 120)}`);
+
+  await check("…that reassures rather than alarms", () =>
+    body.includes("your place are all safe") ? true : "no reassurance");
+
+  await check("…offers a way to try again and a way out", async () => {
+    const actions = await page.$$eval("#app .button", (n) => n.map((b) => b.textContent.trim()));
+    return actions.includes("Try again") && actions.includes("Back to the start")
+      ? true
+      : `it offered: ${JSON.stringify(actions)}`;
+  });
+
+  await check("…and a way to reach a person", () =>
+    body.includes("book you in over the phone") ? true : "no human route offered");
+
+  await check("…with the navigation still on the page", async () => {
+    const nav = await page.$(".site-header");
+    return nav !== null ? true : "the header went with it";
+  });
+
+  await check("…and nothing running off the side of the phone", async () => {
+    const width = await page.evaluate(() => document.documentElement.scrollWidth);
+    return width <= 400 ? true : `the page is ${width}px wide`;
   });
 
   await page.close();

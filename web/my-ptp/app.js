@@ -23,7 +23,7 @@ export async function start(root) {
           el("h1", { text: "My PTP" }),
           el("p", { class: "lede", text: "One account for camps, training, payments and messages." }),
           signInView(api, { heading: "Sign in", note: "Parents and coaches use the same sign-in." }),
-          el("div", { class: "grid grid-2", style: "margin-top:24px" }, [
+          el("div", { class: "grid grid-2 mt-5" }, [
             el("a", { class: "button ghost", href: "/my-ptp/parent/", text: "Parent login" }),
             el("a", { class: "button ghost", href: "/my-ptp/trainer/", text: "Trainer login" }),
           ]),

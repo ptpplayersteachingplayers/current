@@ -52,15 +52,15 @@ export async function start(root) {
         page.quotes
           ? el("div", { class: "grid grid-2" }, page.quotes.map(([quote, who]) =>
               el("blockquote", { class: "card", style: "margin:0" }, [
-                el("p", { style: "font-size:1.0625rem", text: `“${quote}”` }),
+                el("p", { class: "quote", text: `“${quote}”` }),
                 el("p", { class: "meta", style: "margin:0", text: who }),
               ])))
           : null,
 
-        page.note ? el("p", { class: "notice", style: "margin-top:20px", text: page.note }) : null,
+        page.note ? el("p", { class: "notice mt-5", text: page.note }) : null,
 
         page.cta
-          ? el("a", { class: "button primary", style: "margin-top:20px",
+          ? el("a", { class: "button primary mt-5",
                       href: page.cta[1], text: page.cta[0] })
           : null,
       ]),

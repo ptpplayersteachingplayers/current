@@ -15,7 +15,7 @@ import { dateAndTime, money, whenLabel } from "/shared/format.js";
 import { boot } from "/shared/boot.js";
 import { signInView } from "/shared/signin.js";
 import {
-  badge, busy, confirmDialog, el, empty, errorBox, mount, spinner, toast,
+  badge, busy, confirmDialog, el, empty, errorBox, field, mount, spinner, toast,
 } from "/shared/ui.js";
 
 export async function start(root) {
@@ -23,7 +23,12 @@ export async function start(root) {
 
   const render = () => draw(root, api);
   api.auth.onChange(render);
+  addEventListener("hashchange", render);
   await render();
+}
+
+function tab() {
+  return (location.hash || "#home").slice(1);
 }
 
 // pollsLeft is how many more quiet refreshes a pending payment gets before the
@@ -47,15 +52,19 @@ async function draw(root, api, { pollsLeft = 5 } = {}) {
 
   let data;
   try {
-    const [players, bookings, credits, payments, waitlists, pending] = await Promise.all([
-      api.household(),
-      api.bookings(),
-      api.credits(),
-      api.payments(),
-      api.waitlistPlaces(),
-      api.pendingCheckouts(),
-    ]);
-    data = { players, bookings, credits, payments, waitlists, pending };
+    const [players, bookings, credits, payments, waitlists, pending, camps, thread, contacts] =
+      await Promise.all([
+        api.household(),
+        api.bookings(),
+        api.credits(),
+        api.payments(),
+        api.waitlistPlaces(),
+        api.pendingCheckouts(),
+        api.myCampRegistrations().catch(() => []),
+        api.thread().catch(() => null),
+        api.contacts().catch(() => []),
+      ]);
+    data = { players, bookings, credits, payments, waitlists, pending, camps, thread, contacts };
   } catch (error) {
     mount(root, errorBox(error, { onRetry: () => draw(root, api) }));
     return;
@@ -73,33 +82,163 @@ async function draw(root, api, { pollsLeft = 5 } = {}) {
     .filter((b) => b.session && (new Date(b.session.starts_at) <= now || b.status === "attended"))
     .slice(0, 10);
 
-  mount(
-    root,
-    el("h1", { text: "Your family" }),
-    el("p", { class: "lede", text: data.players.map((p) => p.first_name).join(", ") || "No children on your account yet." }),
+  const views = {
+    home: () => [
+      el("h1", { text: "Your family" }),
+      el("p", { class: "lede", text: data.players.map((p) => p.first_name).join(", ") || "No children on your account yet." }),
 
-    ...pendingCards(data.pending, api, root, pollsLeft),
-    nextCard(next),
-    ...invitations(data.waitlists, api, root),
-    creditsCard(credits),
+      ...pendingCards(data.pending, api, root, pollsLeft),
+      nextCard(next),
+      ...invitations(data.waitlists, api, root),
+      creditsCard(credits),
 
-    el("h2", { text: "Coming up" }),
-    upcoming.length === 0
-      ? empty("Nothing booked yet.", "Browse the groups to find a session that fits.")
-      : el("div", {}, upcoming.map((b) => bookingCard(b, api, root, now))),
+      el("h2", { class: "section-label", text: "Coming up" }),
+      upcoming.length === 0
+        ? empty("Nothing booked yet.", "Browse the groups to find a session that fits.")
+        : el("div", {}, upcoming.slice(0, 3).map((b) => bookingCard(b, api, root, now))),
 
-    el("h2", { text: "Sessions so far" }),
-    past.length === 0 ? empty("Nothing yet.") : el("div", {}, past.map((b) => pastCard(b, api))),
+      upcoming.length > 3
+        ? el("a", { class: "button block mt-5", href: "#schedule",
+                    text: `See all ${upcoming.length} sessions` })
+        : null,
 
-    el("h2", { text: "Payments" }),
-    data.payments.length === 0
-      ? empty("No payments yet.")
-      : el("div", {}, data.payments.map((p) => paymentCard(p, api))),
+      el("h2", { class: "section-label", text: "Book something" }),
+      el("div", { class: "stack" }, [
+        el("a", { class: "button primary block", href: "/find-a-camp/", text: "Find a camp" }),
+        el("a", { class: "button block", href: "/group-training/", text: "Book group training" }),
+        el("a", { class: "button block", href: "/private-training/", text: "Book private training" }),
+      ]),
+    ],
 
-    el("p", { class: "meta" }, [
-      el("button", { class: "link", text: "Sign out", onclick: () => api.auth.signOut() }),
+    schedule: () => [
+      el("h1", { text: "Schedule" }),
+      el("p", { class: "lede", text: "Everything booked, soonest first." }),
+
+      el("h2", { class: "section-label", text: "Coming up" }),
+      upcoming.length === 0
+        ? empty("Nothing booked yet.", "Browse the groups to find a session that fits.")
+        : el("div", {}, upcoming.map((b) => bookingCard(b, api, root, now))),
+
+      el("h2", { class: "section-label", text: "Camps" }),
+      data.camps.length === 0
+        ? empty("No camps booked.", "The 2027 weeks are open now.")
+        : el("div", {}, data.camps.map((r) => campCard(r, api))),
+
+      el("h2", { class: "section-label", text: "Sessions so far" }),
+      past.length === 0 ? empty("Nothing yet.") : el("div", {}, past.map((b) => pastCard(b, api))),
+    ],
+
+    messages: () => [
+      el("h1", { text: "Messages" }),
+      el("p", { class: "lede", text: "The same thread as your texts. Anything about an injury, a payment or a complaint goes straight to a person." }),
+      messageThread(data.thread, api, root),
+    ],
+
+    account: () => [
+      el("h1", { text: "Account" }),
+
+      el("h2", { class: "section-label", text: "Players" }),
+      data.players.length === 0
+        ? empty("No children on your account yet.")
+        : el("div", {}, data.players.map((p) =>
+            el("div", { class: "card" }, [
+              el("h3", { text: `${p.first_name} ${p.last_name}` }),
+              el("p", { class: "meta", text: p.birth_date ? `Born ${p.birth_date}` : "No birthday on file" }),
+              el("p", { class: "meta", text: p.club_team || "No club recorded" }),
+            ]))),
+
+      el("h2", { class: "section-label", text: "Who we contact" }),
+      el("div", {}, (data.contacts ?? []).map((c) =>
+        el("div", { class: "card" }, [
+          el("h3", { text: `${c.first_name} ${c.last_name}`.trim() || "Contact" }),
+          el("p", { class: "meta", text: c.email ?? "" }),
+          el("p", { class: "meta", text: c.phone ?? "" }),
+          el("p", { class: "meta", text: consentLine(c) }),
+        ]))),
+
+      el("p", { class: "notice", text: "Reply STOP to any text and we stop immediately — everything, on every channel, straight away." }),
+
+      el("h2", { class: "section-label", text: "Payments" }),
+      data.payments.length === 0
+        ? empty("No payments yet.")
+        : el("div", {}, data.payments.map((p) => paymentCard(p, api))),
+
+      el("div", { class: "mt-7" }, [
+        el("button", { class: "button ghost", text: "Sign out", onclick: () => api.auth.signOut() }),
+      ]),
+    ],
+  };
+
+  mount(root, ...(views[tab()] ?? views.home)());
+}
+
+function consentLine(contact) {
+  const on = [contact.sms_consent && "texts", contact.email_consent && "email"].filter(Boolean);
+  return on.length ? `We may send you ${on.join(" and ")}.` : "We do not message you.";
+}
+
+function campCard(registration, api) {
+  const camp = registration.camps ?? {};
+
+  return el("div", { class: "card" }, [
+    el("div", { class: "card-row" }, [
+      el("div", {}, [
+        el("h3", { text: camp.name ?? "Camp" }),
+        el("p", { class: "meta", text: `${camp.city ?? ""} · ${camp.field_name ?? ""}` }),
+        el("p", { class: "meta", text: camp.starts_on ? `${camp.starts_on} to ${camp.ends_on}` : "" }),
+      ]),
+      el("div", {}, [
+        el("p", { class: "meta", text: registration.players?.first_name ?? "" }),
+        badge(registration.day_option === "half_day" ? "Half day" : "Full day", "neutral"),
+      ]),
     ]),
-  );
+  ]);
+}
+
+// The thread, oldest first, with the family's own messages marked. Sending
+// writes an inbound message the agent picks up — the same path a text takes.
+function messageThread(thread, api, root) {
+  // A parent with no thread cannot start one from here: conversations are
+  // opened by the inbound webhook, and RLS gives a family read access to their
+  // own thread rather than the ability to create one. So the empty state points
+  // at the thing that does work rather than at a box that would fail.
+  if (!thread?.conversation) {
+    return el("div", {}, [
+      empty("No messages yet.", "Text us and the conversation will appear here — the same thread, on this screen and on your phone."),
+      el("a", { class: "button primary mt-5", href: "/contact/", text: "How to reach us" }),
+    ]);
+  }
+
+  const box = el("textarea", { rows: "3", placeholder: "Ask us anything" });
+  const send = el("button", { class: "button primary", text: "Send" });
+
+  send.addEventListener("click", busy(send, async () => {
+    const body = box.value.trim();
+    if (!body) return;
+
+    try {
+      await api.sendMessage(thread.conversation.id, body);
+      box.value = "";
+      toast("Sent.");
+      draw(root, api);
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  }));
+
+  return el("div", {}, [
+    thread.conversation.human_owned
+      ? el("p", { class: "notice", text: "One of the team is on this thread." })
+      : null,
+
+    el("div", { class: "stack mb-6" }, thread.messages.map((m) =>
+      el("div", { class: m.direction === "inbound" ? "card message-mine" : "card" }, [
+        el("p", { class: "meta flush", text: m.direction === "inbound" ? "You" : "PTP" }),
+        el("p", { class: "flush", text: m.body }),
+      ]))),
+
+    el("div", {}, [field("Reply", box), send]),
+  ]);
 }
 
 // The seconds between Stripe taking the money and the webhook creating the

@@ -102,8 +102,8 @@ function about(camp, data) {
   const list = (heading, items) =>
     (items ?? []).length === 0 ? null : el("div", { class: "card" }, [
       el("h3", { text: heading }),
-      el("ul", { style: "margin:12px 0 0;padding-left:18px" },
-        items.map((item) => el("li", { style: "margin-bottom:6px", text: item }))),
+      el("ul", {},
+        items.map((item) => el("li", { text: item }))),
     ]);
 
   return el("section", { class: "section" }, [
@@ -116,7 +116,7 @@ function about(camp, data) {
       ]),
 
       (camp.daily_schedule ?? []).length > 0
-        ? el("div", { style: "margin-top:20px" }, [
+        ? el("div", { class: "mt-5" }, [
             el("h3", { text: "A day at camp" }),
             el("div", { class: "table-scroll" }, [
               el("table", {}, [
@@ -131,7 +131,7 @@ function about(camp, data) {
         : null,
 
       data.staffing.length > 0
-        ? el("div", { style: "margin-top:20px" }, [
+        ? el("div", { class: "mt-5" }, [
             el("h3", { text: "Who is coaching" }),
             el("div", { class: "grid grid-3" }, data.staffing.map((s) =>
               el("div", { class: "card" }, [
@@ -142,7 +142,7 @@ function about(camp, data) {
           ])
         : null,
 
-      el("div", { class: "grid grid-2", style: "margin-top:20px" }, [
+      el("div", { class: "grid grid-2 mt-5" }, [
         camp.weather_plan ? el("div", { class: "card" }, [
           el("h3", { text: "If the weather turns" }),
           el("p", { class: "meta", text: camp.weather_plan }),
@@ -154,7 +154,7 @@ function about(camp, data) {
       ]),
 
       (camp.faqs ?? []).length > 0
-        ? el("div", { style: "margin-top:20px" }, [
+        ? el("div", { class: "mt-5" }, [
             el("h3", { text: "Questions parents ask" }),
             ...camp.faqs.map((faq) =>
               el("div", { class: "card" }, [
@@ -164,7 +164,7 @@ function about(camp, data) {
           ])
         : null,
 
-      el("div", { class: "card", style: "margin-top:20px" }, [
+      el("div", { class: "card mt-5" }, [
         el("h3", { text: "Where" }),
         el("p", { class: "meta", text: camp.field_name }),
         el("p", { class: "meta", text: camp.address_line }),
@@ -303,7 +303,7 @@ function drawForm(api, camp, data, players) {
     addonBoxes.length > 0
       ? el("div", { class: "card" }, [
           el("h3", { text: "Extras" }),
-          el("div", { style: "margin-top:12px" }, addonBoxes.map((a) => a.node)),
+          el("div", { class: "mt-3" }, addonBoxes.map((a) => a.node)),
         ])
       : null,
 
@@ -321,7 +321,7 @@ function drawForm(api, camp, data, players) {
     el("div", { class: "card" }, [
       el("h3", { text: "Agreements" }),
       el("p", { class: "meta", text: "All five are required. Each is recorded with the time you agreed." }),
-      el("div", { style: "margin-top:12px" }, agreementBoxes.map((a) => a.node)),
+      el("div", { class: "mt-3" }, agreementBoxes.map((a) => a.node)),
     ]),
 
     el("div", { class: "card card-inverse" }, [

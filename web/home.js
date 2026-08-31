@@ -107,11 +107,13 @@ function programs() {
         el("span", { class: "eyebrow", text: "Three ways to train" }),
         el("h2", { text: "Choose your program" }),
       ]),
+      // Three parallel choices, so they read as a set: same shape, same
+      // weight, one of them marked. A filled block beside two open rows makes
+      // them look like different kinds of thing.
       el("div", { class: "grid grid-3" }, PROGRAMS.map((program) =>
-        el("div", { class: program.primary ? "card card-inverse" : "card" }, [
+        el("div", { class: program.primary ? "tile tile-lead" : "tile" }, [
           el("h3", { text: program.name }),
-          el("ul", { style: "margin:14px 0 20px;padding-left:18px" },
-            program.points.map((point) => el("li", { style: "margin-bottom:6px", text: point }))),
+          el("ul", {}, program.points.map((point) => el("li", { text: point }))),
           el("a", {
             class: program.primary ? "button primary block" : "button block",
             href: program.cta[1],
@@ -126,7 +128,7 @@ function finderSection() {
   const zip = el("input", { type: "text", inputmode: "numeric", pattern: "[0-9]{5}",
                             maxlength: "5", placeholder: "19401", "aria-label": "ZIP code" });
 
-  const form = el("form", { class: "card" }, [
+  const form = el("form", { class: "tile" }, [
     el("h3", { text: "Find a camp near you" }),
     el("p", { class: "meta", text: "Enter a ZIP code and we will show you what is within driving distance." }),
     field("ZIP code", zip),
@@ -154,7 +156,7 @@ function why() {
         el("h2", { text: "What is different about it" }),
       ]),
       el("div", { class: "grid grid-2" }, WHY.map(([heading, body]) =>
-        el("div", { class: "card" }, [el("h3", { text: heading }), el("p", { class: "meta", text: body })]))),
+        el("div", {}, [el("h3", { text: heading }), el("p", { class: "meta", text: body })]))),
     ]),
   ]);
 }
@@ -179,7 +181,7 @@ async function featuredCamps(api) {
       (camps ?? []).length === 0
         ? empty("2027 camps open shortly.", "Join the early-access list below and you will hear first.")
         : el("div", { class: "grid grid-3" }, camps.slice(0, 3).map(campCard)),
-      el("a", { class: "button block", href: "/find-a-camp/", style: "margin-top:20px", text: "See every camp" }),
+      el("a", { class: "button block", href: "/find-a-camp/", class: "mt-5", text: "See every camp" }),
     ]),
   ]));
 }
@@ -187,7 +189,7 @@ async function featuredCamps(api) {
 export function campCard(camp) {
   const left = camp.spots_left;
 
-  return el("article", { class: "card" }, [
+  return el("article", { class: "tile" }, [
     el("div", { class: "card-row" }, [
       el("div", {}, [
         el("h3", { text: camp.city }),
@@ -195,9 +197,9 @@ export function campCard(camp) {
       ]),
       badge(campBadge(camp), campTone(camp)),
     ]),
-    el("p", { class: "meta", style: "margin-top:12px", text: camp.date_range }),
+    el("p", { class: "meta mt-3", text: camp.date_range }),
     el("p", { class: "meta", text: `${camp.daily_hours} · Ages ${camp.min_age}–${camp.max_age}` }),
-    el("p", { style: "margin:12px 0 16px;font-weight:600",
+    el("p", { class: "price-line",
               text: camp.from_price_cents ? `From ${money(camp.from_price_cents)}` : "" }),
     el("a", { class: "button block", href: `/camp/?c=${camp.slug}`, text: "Details" }),
   ]);
@@ -271,7 +273,7 @@ async function featuredCoaches(api) {
           el("h3", { text: coach.display_name }),
           el("p", { class: "meta", text: coach.bio }),
         ]))),
-      el("a", { class: "button block", href: "/coaches/", style: "margin-top:20px", text: "Meet the coaches" }),
+      el("a", { class: "button block", href: "/coaches/", class: "mt-5", text: "Meet the coaches" }),
     ]),
   ]));
 }
@@ -284,8 +286,8 @@ function reviews() {
         el("h2", { text: "What parents said" }),
       ]),
       el("div", { class: "grid grid-3" }, REVIEWS.map(([quote, who]) =>
-        el("blockquote", { class: "card", style: "margin:0" }, [
-          el("p", { style: "font-size:1.0625rem", text: `“${quote}”` }),
+        el("blockquote", { class: "tile", style: "margin:0" }, [
+          el("p", { class: "quote", text: `“${quote}”` }),
           el("p", { class: "meta", style: "margin:0", text: who }),
         ]))),
     ]),
@@ -319,8 +321,8 @@ function impact() {
 function community() {
   return el("section", { class: "section" }, [
     el("div", { class: "wrap" }, [
-      el("div", { class: "card card-inverse" }, [
-        el("span", { class: "eyebrow", style: "color:#FCB900", text: "For clubs and townships" }),
+      el("div", { class: "card-inverse" }, [
+        el("span", { class: "eyebrow", text: "For clubs and townships" }),
         el("h2", { text: "Bring PTP to your community" }),
         el("p", { class: "meta", text: "If you have a field and a group of players, we will bring the coaches. We ran the PTP × Colonial clinic for 74 players and 10 coaches on exactly that basis." }),
         el("a", { class: "button primary", href: "/bring-ptp-to-your-community/", text: "Start a conversation" }),

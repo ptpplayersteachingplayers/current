@@ -67,7 +67,7 @@ export async function start(root) {
     el("section", { class: "section" }, [
       el("h2", { text: STATE_NAMES[code] ?? code }),
       ...[...towns.entries()].map(([city, list]) =>
-        el("div", { style: "margin-bottom:28px" }, [
+        el("div", { class: "mb-6" }, [
           el("h3", { text: city }),
           el("div", { class: "grid grid-2" }, list.map(campRow)),
         ])),
@@ -75,7 +75,7 @@ export async function start(root) {
 }
 
 function campRow(camp) {
-  return el("article", { class: "card" }, [
+  return el("article", { class: "tile" }, [
     el("div", { class: "card-row" }, [
       el("div", {}, [
         el("h3", { text: camp.date_range }),
@@ -86,6 +86,6 @@ function campRow(camp) {
             : camp.status === "limited" ? `${camp.spots_left} left` : "Open",
             camp.action === "waitlist" ? "full" : camp.status === "limited" ? "nearly" : "open"),
     ]),
-    el("a", { class: "button block", href: `/camp/?c=${camp.slug}`, style: "margin-top:14px", text: "Details" }),
+    el("a", { class: "button block", href: `/camp/?c=${camp.slug}`, class: "mt-4", text: "Details" }),
   ]);
 }

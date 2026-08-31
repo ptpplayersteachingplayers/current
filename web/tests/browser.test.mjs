@@ -534,6 +534,77 @@ await check("…and an expired hold says the place went back, and nothing was ch
 }
 
 console.log("");
+console.log("NAVIGATION");
+
+// Every destination the header, drawer and footer promise. A nav link to a
+// page that does not exist is the defect this whole suite exists to catch, and
+// it is the one a human reviewer never clicks all of.
+{
+  const { page } = await open("/", "parentFixtures", { routes: [catalogRoute] });
+  await page.waitForSelector("h1");
+
+  const links = await page.$$eval("a[href^='/']", (nodes) =>
+    [...new Set(nodes.map((n) => n.getAttribute("href")))]);
+
+  await check("the navigation offers every section the brief specifies", () => {
+    const required = ["/find-a-camp/", "/camps/pennsylvania/", "/camps/new-jersey/",
+                      "/camps/", "/camps/experience/", "/camps/faqs/",
+                      "/bring-ptp-to-your-community/", "/group-training/", "/private-training/",
+                      "/clinics/", "/training/", "/training/faqs/", "/coaches/",
+                      "/apply-to-coach/", "/about/", "/about/story/", "/about/reviews/",
+                      "/about/2026-recap/", "/contact/", "/policies/",
+                      "/my-ptp/parent/", "/my-ptp/trainer/"];
+    const missing = required.filter((href) => !links.includes(href));
+    return missing.length === 0 ? true : `not linked: ${missing.join(", ")}`;
+  });
+
+  await check("…and every one of them is a page that exists", async () => {
+    const broken = [];
+    for (const href of links) {
+      const response = await page.request.get(`${base}${href}`);
+      if (!response.ok()) broken.push(`${href} → ${response.status()}`);
+    }
+    return broken.length === 0 ? true : broken.join(", ");
+  });
+
+  await check("the logo goes home, and there is no separate Home link", () => {
+    const wordmark = links.includes("/");
+    const home = links.filter((h) => h === "/home" || h === "/index.html");
+    return wordmark && home.length === 0 ? true : "a Home link crept in";
+  });
+
+  await page.close();
+}
+
+{
+  const { page } = await open("/", "parentFixtures", { routes: [catalogRoute] });
+  await page.waitForSelector("h1");
+
+  await check("the mobile drawer opens and closes", async () => {
+    await page.click("button.menu-toggle");
+    await page.waitForSelector(".drawer", { state: "visible", timeout: TIMEOUT });
+
+    const groups = await page.$$eval(".drawer-group > button", (n) => n.map((b) => b.textContent.trim()));
+
+    await page.click("button.menu-toggle");
+    // state: hidden, not a [hidden] selector — a hidden element is not
+    // "visible", so the default wait can never be satisfied by one.
+    await page.waitForSelector(".drawer", { state: "hidden", timeout: TIMEOUT });
+
+    return groups.length === 5 ? true : `the drawer listed ${JSON.stringify(groups)}`;
+  });
+
+  await check("the sticky bar carries two actions and no more", async () => {
+    const actions = await page.$$eval(".action-bar a", (nodes) => nodes.map((n) => n.textContent));
+    return actions.length === 2 && actions[0] === "Find a Camp" && actions[1] === "Book Training"
+      ? true
+      : `it carried: ${JSON.stringify(actions)}`;
+  });
+
+  await page.close();
+}
+
+console.log("");
 console.log("REACHABILITY");
 
 // Checked on every page, not one of them. The booking page was the one that

@@ -69,7 +69,38 @@ const PAGES = [
   ["bring-ptp-to-your-community/index.html", "Bring PTP to Your Community",
    "If you have a field and a group of players, we will bring the coaches.",
    "/bring-ptp-to-your-community/app.js"],
+
+  ["private-training/pay/index.html", "Confirm your session — PTP",
+   "Pay for a private training session.", "/private-training/pay/app.js", null, true],
 ];
+
+// The pages that are words rather than software. One template, one content
+// file — which is how a link in the navigation cannot promise a page that does
+// not exist.
+const CONTENT = [
+  ["camps/experience/index.html", "The Camp Experience — PTP",
+   "What a week at a PTP camp is actually like."],
+  ["camps/faqs/index.html", "Camp FAQs — PTP",
+   "What to bring, what happens if it rains, and what a refund looks like."],
+  ["training/faqs/index.html", "Training FAQs — PTP",
+   "How seasons, credits, cancellations and private blocks work."],
+  ["clinics/index.html", "Clinics and Events — PTP",
+   "One-off sessions for clubs, townships and schools."],
+  ["apply-to-coach/index.html", "Apply to Coach — PTP",
+   "Coaching work for current college and professional players."],
+  ["about/index.html", "Why PTP",
+   "Players teaching players: small groups, current players, straight answers."],
+  ["about/story/index.html", "Our Story — PTP", "How PTP started."],
+  ["about/reviews/index.html", "Parent Reviews — PTP", "What families said about summer 2026."],
+  ["about/2026-recap/index.html", "2026 Summer Recap — PTP", "What last year looked like, in numbers."],
+  ["contact/index.html", "Contact PTP", "Text us — it is the fastest way, and it is a person."],
+  ["policies/index.html", "Policies — PTP",
+   "Refunds, cancellations, weather, photographs, messages and your data."],
+];
+
+for (const [path, title, description] of CONTENT) {
+  PAGES.push([path, title, description, "/shared/content-page.js"]);
+}
 
 for (const [path, title, description, module, portal, stripe] of PAGES) {
   let html = pageHtml({ title, description, module, portal });

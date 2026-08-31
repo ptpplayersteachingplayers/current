@@ -54,3 +54,6 @@ logs
 # Temporary files
 tmp/
 temp/
+
+# Staging secrets — the .example is committed, the real one never is.
+.env.staging

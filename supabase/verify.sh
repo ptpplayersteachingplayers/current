@@ -851,6 +851,84 @@ assert_admin "select set_automation_paused(false, 'all clear');" "…and start i
 assert_as "$MAI" "select set_automation_paused(true, 'mischief');" "a parent cannot"                                          "administrator action"
 echo
 
+echo "RUNNING THE TRAINING SIDE — a season built through the console, not SQL"
+# Everything in this database arrived from a seed file until now. This section
+# builds a group the way an administrator would have to: a field, a season, a
+# group, a schedule, and opening it.
+
+NEWLOC=$(ADMIN "select upsert_location('{\"name\":\"Wissahickon Turf\",\"city\":\"Ambler\",\"state\":\"PA\",\"postal_code\":\"19002\",\"surface\":\"turf\",\"permit_status\":\"permitted\"}'::jsonb);")
+assert "select name from locations where id='$NEWLOC';" "an administrator can add a field"                                    "Wissahickon"
+assert "select verified_at is null from locations where id='$NEWLOC';" \
+       "…which is not verified just because it was typed in"                                                                "^t$"
+
+NEWSEASON=$(ADMIN "select upsert_season('{\"name\":\"Winter 2027\",\"starts_on\":\"2027-01-05\",\"ends_on\":\"2027-03-02\"}'::jsonb);")
+assert "select weeks from seasons where id='$NEWSEASON';" "a season works out its own length"                                 "^8$"
+assert "select credits_expire_on = ends_on from seasons where id='$NEWSEASON';" \
+       "…and credits expire with it unless told otherwise"                                                                  "^t$"
+
+NEWGROUP=$(ADMIN "select upsert_training_group(('{\"season_id\":\"$NEWSEASON\",\"name\":\"Monday U10 Foundation\",\"min_age\":8,\"max_age\":10,\"location_id\":\"$NEWLOC\"}')::jsonb);")
+assert "select slug from training_groups where id='$NEWGROUP';" "a group slugs itself from its name"                         "^monday-u10-foundation$"
+assert "select status::text from training_groups where id='$NEWGROUP';" "…and starts as a draft"                             "^draft$"
+
+assert_admin "select publish_training_group('$NEWGROUP');" \
+       "a group with no schedule cannot be opened"                                                                          "no meeting times"
+
+assert_admin "select set_group_meeting_times('$NEWGROUP','[{\"weekday\":1,\"starts_time\":\"17:30\",\"duration_minutes\":60}]'::jsonb);" \
+       "a weekly schedule generates the season's sessions"                                                                  "^8$"
+assert "select count(*) from sessions where group_id='$NEWGROUP';" "…eight Mondays, one per week"                            "^8$"
+
+assert_admin "select publish_training_group('$NEWGROUP');" \
+       "a group still cannot open on an unverified field"                                                                   "not verified and permitted"
+
+assert_admin "select verify_location('$NEWLOC');" "a field can be verified"                                                  "^t$"
+assert "select verified_by is not null from locations where id='$NEWLOC';" "…recording who did it"                           "^t$"
+assert "select count(*) from audit_logs where action='location.verified';" "…in the audit log"                               "^1$"
+
+TRAINER=$(Q "select id from trainers where status='active' and background_check_status='cleared' limit 1;")
+ADMIN "select upsert_training_group(('{\"id\":\"$NEWGROUP\",\"trainer_id\":\"$TRAINER\"}')::jsonb);" >/dev/null
+assert_admin "select (publish_training_group('$NEWGROUP')::jsonb) ->> 'status';" \
+       "with a verified field and a cleared trainer it opens"                                                               "^forming$"
+
+# ---- the guards that matter once families are in it -------------------------
+SESS=$(Q "select id from sessions where group_id='$NEWGROUP' order by starts_at limit 1;")
+PLAYER=$(Q "select id from players where first_name='Leo';")
+# A confirmed booking needs a payment or a credit — the constraint asserted
+# further up — so this is booked the way a family's money actually arrives.
+PAY=$(Q "insert into payments (household_id, amount_cents, status)
+         select household_id, 5500, 'succeeded' from players where id='$PLAYER'
+         returning id;")
+Q "insert into bookings (session_id, player_id, household_id, status, price_cents, payment_id)
+   select '$SESS', id, household_id, 'confirmed', 5500, '$PAY' from players where id='$PLAYER';" >/dev/null
+
+assert_admin "select set_group_meeting_times('$NEWGROUP','[{\"weekday\":3,\"starts_time\":\"17:30\"}]'::jsonb);" \
+       "a schedule cannot be moved out from under a family who paid"                                                        "player(s) are booked"
+assert "select count(*) from sessions where group_id='$NEWGROUP';" "…and nothing was deleted while refusing"                 "^8$"
+
+assert_admin "select cancel_training_group('$NEWGROUP','');" "closing a group needs a reason"                                "needs a reason"
+assert_admin "select cancel_training_group('$NEWGROUP','Field lost');" \
+       "…and refuses while someone has paid"                                                                                "Refund them first"
+assert_admin "select verify_location('$NEWLOC', false);" \
+       "a field cannot be unverified under a live group"                                                                    "group(s) are open"
+
+Q "update bookings set status='canceled' where session_id='$SESS';" >/dev/null
+assert_admin "select (cancel_training_group('$NEWGROUP','Field lost')::jsonb) ->> 'paid_bookings';" \
+       "once refunded, the group closes"                                                                                    "^0$"
+assert "select count(*) from sessions where group_id='$NEWGROUP' and status='canceled';" \
+       "…cancelling its remaining sessions"                                                                                 "^8$"
+
+# ---- who may do any of this -------------------------------------------------
+assert_as "$MAI" "select upsert_location('{\"name\":\"My House\"}'::jsonb);" \
+       "a parent cannot invent a field"                                                                                     "administrator action"
+assert_as "$MAI" "select upsert_training_group('{\"season_id\":\"$NEWSEASON\",\"name\":\"Free Sessions\"}'::jsonb);" \
+       "…nor a group"                                                                                                       "administrator action"
+assert_as "$MAI" "select upsert_trainer('{\"first_name\":\"Me\",\"hourly_pay_cents\":100000}'::jsonb);" \
+       "…nor put themselves on the payroll"                                                                                 "administrator action"
+assert_as "$MAI" "select verify_location('$NEWLOC');" "…nor approve a field"                                                 "administrator action"
+assert_anon "select upsert_training_group('{\"name\":\"x\"}'::jsonb);" \
+       "a visitor cannot reach any of it"                                                                                   "permission denied"
+assert_anon "select generate_group_sessions('$NEWGROUP');" "…including the session generator"                                "permission denied"
+echo
+
 echo "REMOVING THE MODULE"
 # The last thing a module has to prove is that it can leave. Run this at the
 # end, because everything after it is a platform with no agent.

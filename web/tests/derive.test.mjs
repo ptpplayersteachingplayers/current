@@ -111,20 +111,30 @@ const summary = creditSummary(credits, { timeZone: TZ, now: NOW });
 check("available is counted", summary.available, 2);
 check("reserved is not available", summary.reserved, 1);
 check("spent is counted separately", summary.consumed, 1);
+// These three asserted "good until 2026-10-25" for a year, which is a database
+// column read out loud rather than a date written to a parent. The assertion
+// was the bug: it could not fail while the page was wrong.
 check(
-  "the note says how many and until when",
+  "the note says how many and until when, as a date a person writes",
   summary.note,
-  "2 sessions left, good until 2026-10-25.",
+  "2 sessions left, good until Sun 25 Oct.",
 );
 check(
   "one session reads as one, not '1 sessions'",
   creditSummary([{ state: "available", expires_on: "2026-12-01" }], { timeZone: TZ, now: NOW }).note,
-  "1 session left, good until 2026-12-01.",
+  "1 session left, good until Tue 1 Dec.",
 );
 check(
   "credits about to expire say so instead",
   creditSummary([{ state: "available", expires_on: "2026-09-10" }], { timeZone: TZ, now: NOW }).note,
-  "1 session expires on 2026-09-10.",
+  "1 session expires on Thu 10 Sep.",
+);
+// expires_on is a date, not a moment. Read naively it lands on the previous
+// evening in New York and the parent is told the wrong day.
+check(
+  "a date is not shifted backwards by the timezone",
+  creditSummary([{ state: "available", expires_on: "2027-01-01" }], { timeZone: TZ, now: NOW }).note,
+  "1 session left, good until Fri 1 Jan.",
 );
 check(
   "a family with none left but some spent is reassured, not alarmed",

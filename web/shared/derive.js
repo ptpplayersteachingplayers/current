@@ -12,7 +12,7 @@
 // Pure functions with the clock passed in, so they can be tested.
 // =============================================================================
 
-import { dayKey, money, plural, relativeDay, time, whenLabel } from "./format.js";
+import { date, dayKey, money, plural, relativeDay, time, whenLabel } from "./format.js";
 
 // -----------------------------------------------------------------------------
 // Parent
@@ -52,10 +52,16 @@ export function creditSummary(credits, { timeZone, now = new Date(), soonDays = 
     return days <= soonDays;
   });
 
-  const nextExpiry = available
+  // expires_on is a date, not a moment. Read it at noon UTC so no timezone can
+  // shift it onto the day before — the same trick the `soon` filter uses above.
+  const nextExpiryOn = available
     .map((c) => c.expires_on)
     .sort()
     .at(0);
+
+  const nextExpiry = nextExpiryOn
+    ? date(`${nextExpiryOn}T12:00:00Z`, timeZone)
+    : null;
 
   let note = null;
   if (available.length === 0 && consumed.length > 0) {

@@ -362,7 +362,9 @@ function hoursTable(hours, api) {
     el("h3", { class: "mt-4", text: "Recent days" }),
     ...hours.slice(0, 10).map((h) =>
       el("div", { class: "register-row" }, [
-        el("span", { class: "register-name", text: h.worked_on }),
+        // worked_on is a date column. Read at noon UTC so no timezone shifts a
+        // trainer's shift onto the previous evening.
+        el("span", { class: "register-name", text: date(`${h.worked_on}T12:00:00Z`, api.timeZone) }),
         el("span", { class: "meta", text: `${(h.minutes / 60).toFixed(h.minutes % 60 === 0 ? 0 : 1)} h` }),
         el("span", { text: money(h.amount_cents) }),
         h.paid_at ? badge("paid", "running") : badge("due", "neutral"),

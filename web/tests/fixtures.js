@@ -208,6 +208,79 @@ export const demoMidCheckoutFixtures = {
   tables: { ...midCheckoutFixtures.tables, bookings: demoBookings },
 };
 
+
+// =============================================================================
+// The public site
+// =============================================================================
+// What an anonymous visitor sees. The portals have had fixtures since the
+// beginning; the public pages did not, which meant a screenshot run showed
+// every one of them in its offline state and nobody noticed the site had
+// never actually been looked at with data in it.
+
+const camp = (id, name, city, state, region, starts, status, capacity, image) => ({
+  id, name, slug: id, city, state, region, postal_code: "19401",
+  field_name: `${name} Field`, address_line: "1 Sports Way",
+  starts_on: starts, ends_on: starts.replace(/(\d\d)$/, (d) => String(Number(d) + 4).padStart(2, "0")),
+  daily_starts_at: "09:00:00", daily_ends_at: "15:00:00", half_day_ends_at: "12:00:00",
+  min_age: 6, max_age: 14,
+  full_day_price_cents: 39500, half_day_price_cents: 27500,
+  offers_full_day: true, offers_half_day: true,
+  capacity, status, featured_image_url: image ?? null,
+});
+
+const publicCamps = [
+  camp("norristown", "Norristown", "Norristown", "PA", "Montgomery County", "2027-06-21", "registration_open", 48),
+  camp("cherry-hill", "Cherry Hill", "Cherry Hill", "NJ", "Camden County", "2027-07-12", "limited", 40),
+  camp("doylestown", "Doylestown", "Doylestown", "PA", "Bucks County", "2027-07-26", "full", 36),
+  camp("princeton", "Princeton", "Princeton", "NJ", "Mercer County", "2027-08-09", "registration_open", 44),
+];
+
+export const publicFixtures = {
+  session: null,
+  tables: {
+    camps: publicCamps,
+    trainers: [
+      { id: "t1", first_name: "Dani", last_name: "Okoro", display_name: "Dani Okoro",
+        bio: "Plays Division I at Villanova. Coaches the U9s on first touch and standing a defender up.",
+        photo_url: "", status: "active", college: "Villanova", position: "Midfielder" },
+      { id: "t2", first_name: "Marcus", last_name: "Bell", display_name: "Marcus Bell",
+        bio: "Division I at Temple. Runs the advanced groups; hard on shape, patient on technique.",
+        photo_url: "", status: "active", college: "Temple", position: "Centre back" },
+      { id: "t3", first_name: "Sofia", last_name: "Ramos", display_name: "Sofia Ramos",
+        bio: "Played four years at Drexel and two seasons abroad. Private sessions and goalkeeping.",
+        photo_url: "", status: "active", college: "Drexel", position: "Goalkeeper" },
+    ],
+  },
+  rpc: {
+    camps_near: (args) => publicCamps
+      .filter((c) => !args?.p_state || c.state === args.p_state)
+      .map((c, i) => ({ ...c, miles: 4 + i * 9 })),
+
+    // Called once per camp on the listing pages, through .single().
+    camp_occupancy: (args) => {
+      const camp = publicCamps.find((c) => c.id === args?.p_camp_id);
+      const paid = { norristown: 31, "cherry-hill": 36, doylestown: 36, princeton: 12 }[args?.p_camp_id] ?? 0;
+      return { paid, held: 0, total: paid, capacity: camp?.capacity ?? 40,
+               places_left: Math.max(0, (camp?.capacity ?? 40) - paid) };
+    },
+
+    // The private board: weekend hours a trainer is already out for.
+    offerable_private_slots_all: () => [
+      { id: "s1", trainer_id: "t1", trainer_name: "Dani Okoro", location_name: "Norristown Turf",
+        starts_at: "2027-03-06T15:00:00Z", ends_at: "2027-03-06T16:00:00Z",
+        minutes: 60, price_cents: 9500, adjoins_work: true },
+      { id: "s2", trainer_id: "t3", trainer_name: "Sofia Ramos", location_name: "Riverside Park",
+        starts_at: "2027-03-06T16:00:00Z", ends_at: "2027-03-06T17:00:00Z",
+        minutes: 60, price_cents: 9500, adjoins_work: true },
+      { id: "s3", trainer_id: "t1", trainer_name: "Dani Okoro", location_name: "Norristown Turf",
+        starts_at: "2027-03-07T14:00:00Z", ends_at: "2027-03-07T15:00:00Z",
+        minutes: 60, price_cents: 9500, adjoins_work: true },
+    ],
+
+    register_camp_interest: () => true,
+  },
+};
+
 // An administrator: the same shape as a parent, plus the claim. The claim is
 // what the database checks; nothing about the interface grants it.
 // Every write the screens make, in order. Reset by resetCalls() between tests.

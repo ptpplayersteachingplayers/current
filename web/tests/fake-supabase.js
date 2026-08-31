@@ -77,13 +77,28 @@ export function fakeSupabase(fixtures) {
       }
       // The real client returns an error, it does not throw. A stub that throws
       // is how a test says "the database refused this".
+      let settled;
       try {
         const value = handler(args);
-        return Promise.resolve({ data: value, error: null, single: () => Promise.resolve({ data: value, error: null }) });
+        settled = { data: value, error: null };
       } catch (thrown) {
-        const error = { message: thrown.message, code: thrown.code ?? "P0001" };
-        return Promise.resolve({ data: null, error, single: () => Promise.resolve({ data: null, error }) });
+        settled = { data: null, error: { message: thrown.message, code: thrown.code ?? "P0001" } };
       }
+
+      // PostgREST's builder is awaitable *and* chainable: real code writes
+      // client.rpc(...).single(). Returning a bare promise put `single` on the
+      // resolved value instead of the builder, so every such call threw
+      // "single is not a function" — and because the pages catch and show
+      // their offline state, it looked like a network problem rather than a
+      // hole in this stub.
+      const one = (rows) => (Array.isArray(rows) ? rows[0] ?? null : rows);
+
+      return {
+        then: (resolve, reject) => Promise.resolve(settled).then(resolve, reject),
+        single: () => Promise.resolve(settled.error ? settled : { data: one(settled.data), error: null }),
+        maybeSingle: () => Promise.resolve(settled.error ? settled : { data: one(settled.data), error: null }),
+        select: () => Promise.resolve(settled),
+      };
     },
     auth: {
       getUser: () => result(session ? { user: session.user } : { user: null }),

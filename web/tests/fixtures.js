@@ -210,12 +210,42 @@ export const demoMidCheckoutFixtures = {
 
 // An administrator: the same shape as a parent, plus the claim. The claim is
 // what the database checks; nothing about the interface grants it.
+// Every write the screens make, in order. Reset by resetCalls() between tests.
+export const calls = [];
+export function resetCalls() { calls.length = 0; }
+
 export const adminFixtures = {
   ...parentFixtures,
   session: {
     user: { id: "u9", email: "ops@example.test", app_metadata: { ptp_role: "admin" } },
     access_token: "t",
   },
+  tables: {
+    ...parentFixtures.tables,
+    seasons: [
+      { id: "s1", name: "Autumn 2026", starts_on: "2026-09-08", ends_on: "2026-11-03", weeks: 8, status: "running" },
+    ],
+    locations: [
+      { id: "l1", name: "Norristown Turf", city: "Norristown", state: "PA",
+        permit_status: "permitted", verified_at: inHours(-800), active: true },
+      { id: "l2", name: "Cheltenham Field", city: "Cheltenham", state: "PA",
+        permit_status: "unknown", verified_at: null, active: true },
+    ],
+    trainers: [
+      { id: "t1", first_name: "Dani", last_name: "Okoro", status: "active", background_check_status: "cleared" },
+      { id: "t2", first_name: "Marcus", last_name: "Bell", status: "active", background_check_status: "pending" },
+    ],
+    training_groups: [
+      { id: "g1", name: "Mon/Wed U9 Foundation", slug: "u9-foundation", season_id: "s1",
+        location_id: "l1", trainer_id: "t1", min_age: 8, max_age: 9, min_skill: 1, max_skill: 3,
+        min_players: 4, target_players: 5, max_players: 6, status: "draft", dropin_price_cents: null,
+        group_meeting_times: [
+          { id: "m1", weekday: 1, starts_time: "17:30:00", duration_minutes: 60 },
+          { id: "m2", weekday: 3, starts_time: "17:30:00", duration_minutes: 60 },
+        ] },
+    ],
+  },
+
   rpc: {
     operations_today: () => ({
       escalations: [
@@ -261,6 +291,25 @@ export const adminFixtures = {
         paid: 3, capacity: 6, fill_rate: 0.5, short_by: 1, revenue_cents: 168000,
         sessions_remaining: 14 },
     ],
+
+    // ---- the training write surface ---------------------------------------
+    // These record what was asked for, so a test can assert the screen sent
+    // the right thing rather than only that it did not crash.
+    upsert_training_group: (args) => { calls.push(["upsert_training_group", args]); return "g-new"; },
+    set_group_meeting_times: (args) => { calls.push(["set_group_meeting_times", args]); return 16; },
+    publish_training_group: (args) => {
+      calls.push(["publish_training_group", args]);
+      return { group_id: args.p_group_id, status: "forming", meeting_times: 2, sessions_generated: 16 };
+    },
+    cancel_training_group: (args) => { calls.push(["cancel_training_group", args]); return { paid_bookings: 0 }; },
+    upsert_location: (args) => { calls.push(["upsert_location", args]); return "l-new"; },
+    verify_location: (args) => {
+      calls.push(["verify_location", args]);
+      if (args.p_verified === false) {
+        throw new Error("Cannot unverify: 1 group(s) are open on this field. Move or cancel them first");
+      }
+      return true;
+    },
 
     payroll_for_period: () => [
       { trainer_id: "t1", trainer_name: "Dani Okoro", stripe_account_id: "acct_1",

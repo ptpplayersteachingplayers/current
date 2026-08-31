@@ -765,3 +765,64 @@ main.wrap { padding-top: var(--s7); }
 .button-join > .button + .button { margin-left: -2px; }
 
 .price-line { font-weight: 600; margin: var(--s3) 0 var(--s4); }
+
+/* ---- Running the training side ----------------------------------------- */
+/* The admin forms. Same 2px borders and square corners as everything else —
+   an internal screen is not an excuse for a different system. */
+
+.muted {
+  color: var(--ink-60);
+  font-size: var(--t-small);
+  max-width: var(--measure);
+  margin: var(--s2) 0 0;
+}
+
+.field-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s3);
+}
+
+/* One meeting time. Stacks on a phone, sits on a line from 480px up, with the
+   remove button aligned to the inputs rather than to their labels. */
+.meeting-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--s3);
+  border: var(--border);
+  padding: var(--s3);
+  margin-bottom: var(--s3);
+}
+
+@media (min-width: 480px) {
+  .meeting-row {
+    grid-template-columns: 1.2fr 1fr 0.8fr auto;
+    align-items: end;
+  }
+  .meeting-row .button { margin-bottom: 2px; }
+}
+
+/* A table cell that opens something. A button, so it is reachable by keyboard
+   and announced as an action, but it reads as the row's name. */
+.link-cell {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  border-bottom: 2px solid var(--gold);
+  min-height: 44px;
+}
+
+.link-cell:hover,
+.link-cell:focus-visible {
+  background: var(--gold);
+  color: var(--black);
+}
+
+/* The editor is taller than a confirmation, so it scrolls inside the sheet
+   rather than pushing the actions off the bottom of a phone. */
+.sheet { max-height: 90vh; overflow-y: auto; }

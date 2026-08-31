@@ -437,6 +437,104 @@ export function createApi(client, { functionsBase, timeZone = "America/New_York"
         return data ?? [];
       },
 
+      // ---- running the training side --------------------------------------
+      // The write half. Each of these is a single database function that
+      // asserts staff in its own body, so the screen is a form and not a
+      // second copy of the rules.
+
+      seasons: async () => {
+        const { data, error } = await client
+          .from("seasons")
+          .select("id, name, starts_on, ends_on, weeks, status")
+          .order("starts_on", { ascending: false });
+        if (error) throw error;
+        return data ?? [];
+      },
+
+      locations: async () => {
+        const { data, error } = await client
+          .from("locations")
+          .select("id, name, city, state, permit_status, verified_at, active")
+          .order("name");
+        if (error) throw error;
+        return data ?? [];
+      },
+
+      trainerList: async () => {
+        const { data, error } = await client
+          .from("trainers")
+          .select("id, first_name, last_name, status, background_check_status")
+          .order("first_name");
+        if (error) throw error;
+        return data ?? [];
+      },
+
+      groupDetail: async (groupId) => {
+        const { data, error } = await client
+          .from("training_groups")
+          .select("id, name, slug, season_id, location_id, trainer_id, min_age, max_age, " +
+                  "min_skill, max_skill, min_players, target_players, max_players, " +
+                  "status, dropin_price_cents, group_meeting_times(id, weekday, starts_time, duration_minutes)")
+          .eq("id", groupId)
+          .single();
+        if (error) throw error;
+        return data;
+      },
+
+      saveLocation: async (details) => {
+        const { data, error } = await client.rpc("upsert_location", { p_details: details });
+        if (error) throw error;
+        return data;
+      },
+
+      verifyLocation: async (locationId, verified = true) => {
+        const { data, error } = await client.rpc("verify_location", {
+          p_location_id: locationId, p_verified: verified,
+        });
+        if (error) throw error;
+        return data;
+      },
+
+      saveSeason: async (details) => {
+        const { data, error } = await client.rpc("upsert_season", { p_details: details });
+        if (error) throw error;
+        return data;
+      },
+
+      saveGroup: async (details) => {
+        const { data, error } = await client.rpc("upsert_training_group", { p_details: details });
+        if (error) throw error;
+        return data;
+      },
+
+      setMeetingTimes: async (groupId, times) => {
+        const { data, error } = await client.rpc("set_group_meeting_times", {
+          p_group_id: groupId, p_times: times,
+        });
+        if (error) throw error;
+        return data;
+      },
+
+      publishGroup: async (groupId) => {
+        const { data, error } = await client.rpc("publish_training_group", { p_group_id: groupId });
+        if (error) throw error;
+        return data;
+      },
+
+      cancelGroup: async (groupId, reason, force = false) => {
+        const { data, error } = await client.rpc("cancel_training_group", {
+          p_group_id: groupId, p_reason: reason, p_force: force,
+        });
+        if (error) throw error;
+        return data;
+      },
+
+      saveTrainer: async (details) => {
+        const { data, error } = await client.rpc("upsert_trainer", { p_details: details });
+        if (error) throw error;
+        return data;
+      },
+
       payroll: async (from, to) => {
         const { data, error } = await client.rpc("payroll_for_period", { p_from: from, p_to: to });
         if (error) throw error;

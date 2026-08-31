@@ -75,8 +75,15 @@ export function fakeSupabase(fixtures) {
           error: { code: "42883", message: `No stub for rpc ${name}` },
         });
       }
-      const value = handler(args);
-      return Promise.resolve({ data: value, error: null, single: () => Promise.resolve({ data: value, error: null }) });
+      // The real client returns an error, it does not throw. A stub that throws
+      // is how a test says "the database refused this".
+      try {
+        const value = handler(args);
+        return Promise.resolve({ data: value, error: null, single: () => Promise.resolve({ data: value, error: null }) });
+      } catch (thrown) {
+        const error = { message: thrown.message, code: thrown.code ?? "P0001" };
+        return Promise.resolve({ data: null, error, single: () => Promise.resolve({ data: null, error }) });
+      }
     },
     auth: {
       getUser: () => result(session ? { user: session.user } : { user: null }),

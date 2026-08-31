@@ -13,10 +13,10 @@ import { boot } from "/shared/boot.js";
 import { dateAndTime, money, plural } from "/shared/format.js";
 import { signInView } from "/shared/signin.js";
 import {
-  badge, busy, confirmDialog, el, empty, errorBox, field, mount, spinner, toast,
+  badge, busy, confirmDialog, el, empty, errorBox, field, mount, promptDialog, spinner, toast,
 } from "/shared/ui.js";
 
-const TABS = [["Today", "home"], ["Camps", "camps"], ["Groups", "groups"], ["Pay", "pay"]];
+const TABS = [["Today", "home"], ["Groups", "groups"], ["Fields", "fields"], ["Camps", "camps"], ["Pay", "pay"]];
 
 export async function start(root) {
   const api = await boot();
@@ -58,7 +58,8 @@ async function draw(root, api) {
   try {
     switch (tab()) {
       case "camps":  return await campsView(panel, api);
-      case "groups": return await groupsView(panel, api);
+      case "groups": return await groupsView(panel, api, () => draw(root, api));
+      case "fields": return await fieldsView(panel, api, () => draw(root, api));
       case "pay":    return await payView(panel, api);
       default:       return await todayView(panel, api, root);
     }
@@ -289,8 +290,27 @@ async function campsView(panel, api) {
   );
 }
 
-async function groupsView(panel, api) {
+async function groupsView(panel, api, redraw) {
   const groups = await api.admin.groups();
+
+  // The editor opens over the list rather than navigating away, so closing it
+  // returns you to where you were in a long season.
+  const openEditor = async (groupId) => {
+    const backdrop = el("div", { class: "sheet-backdrop" });
+    const done = () => { backdrop.remove(); redraw(); };
+
+    backdrop.append(el("div", { class: "sheet", role: "dialog", "aria-modal": "true" }, [
+      await groupEditor(api, groupId, done),
+      el("div", { class: "sheet-actions" }, [
+        el("button", { class: "button ghost", text: "Close", onclick: () => backdrop.remove() }),
+      ]),
+    ]));
+
+    document.body.append(backdrop);
+  };
+
+  const add = el("button", { class: "button", text: "New group" });
+  add.onclick = () => openEditor(null);
 
   mount(panel,
     el("h1", { text: "Groups" }),
@@ -306,7 +326,9 @@ async function groupsView(panel, api) {
             ])]),
             el("tbody", {}, groups.map((g) =>
               el("tr", {}, [
-                el("td", {}, [el("strong", { text: g.name })]),
+                el("td", {}, [el("button", {
+                  class: "link-cell", text: g.name, onclick: () => openEditor(g.group_id ?? g.id),
+                })]),
                 el("td", { text: `${g.paid}/${g.capacity}` }),
                 el("td", { text: g.short_by === 0 ? "—" : String(g.short_by) }),
                 el("td", { text: String(g.sessions_remaining) }),
@@ -315,6 +337,7 @@ async function groupsView(panel, api) {
               ]))),
           ]),
         ]),
+    el("div", { class: "sheet-actions" }, [add]),
   );
 }
 
@@ -424,4 +447,270 @@ function downloadCsv(rows, from, to) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+// =============================================================================
+// Running the training side
+// =============================================================================
+// The forms behind upsert_training_group, set_group_meeting_times and the
+// rest. Deliberately thin: every rule these screens appear to enforce is
+// enforced in the database, and this file's job is to put the refusal on the
+// screen in words a person can act on.
+//
+// So there is no client-side validation that mirrors a constraint. If a group
+// cannot open on an unverified field, the database says so and we show that
+// sentence — one place to change it, and no way for the two to disagree.
+// =============================================================================
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** A group's weekly pattern in words: "Tue & Thu, 5:30pm". */
+function scheduleSummary(times) {
+  if (!times || times.length === 0) return "No schedule yet";
+
+  const sorted = [...times].sort((a, b) =>
+    a.weekday - b.weekday || a.starts_time.localeCompare(b.starts_time));
+
+  const days = sorted.map((t) => WEEKDAYS[t.weekday].slice(0, 3)).join(" & ");
+  const [h, m] = sorted[0].starts_time.split(":").map(Number);
+  const suffix = h >= 12 ? "pm" : "am";
+  const hour = h % 12 === 0 ? 12 : h % 12;
+
+  return `${days}, ${hour}:${String(m).padStart(2, "0")}${suffix}`;
+}
+
+function optionList(select, rows, label, selected) {
+  select.append(el("option", { value: "", text: "—" }));
+  for (const row of rows) {
+    const option = el("option", { value: row.id, text: label(row) });
+    if (row.id === selected) option.selected = true;
+    select.append(option);
+  }
+  return select;
+}
+
+/**
+ * The group editor. One sheet, three sections: who it is for, where and with
+ * whom, and when it meets. Saving the first two is one call; the schedule is
+ * its own, because changing it can be refused for a reason worth reading.
+ */
+async function groupEditor(api, groupId, onDone) {
+  const [seasons, locations, trainers] = await Promise.all([
+    api.admin.seasons(), api.admin.locations(), api.admin.trainerList(),
+  ]);
+
+  const group = groupId ? await api.admin.groupDetail(groupId) : null;
+  const times = group?.group_meeting_times ?? [];
+
+  const name = el("input", { class: "input", value: group?.name ?? "", placeholder: "Tuesday/Thursday U12 Advanced" });
+  const season = optionList(el("select", { class: "input" }), seasons, (s) => s.name, group?.season_id);
+  const location = optionList(el("select", { class: "input" }), locations,
+    (l) => `${l.name}${l.verified_at ? "" : " — not verified"}`, group?.location_id);
+  const trainer = optionList(el("select", { class: "input" }), trainers,
+    (t) => `${t.first_name} ${t.last_name}${t.background_check_status === "cleared" ? "" : " — not cleared"}`,
+    group?.trainer_id);
+
+  const minAge = el("input", { class: "input", type: "number", min: "4", max: "21", value: group?.min_age ?? "" });
+  const maxAge = el("input", { class: "input", type: "number", min: "4", max: "21", value: group?.max_age ?? "" });
+  const maxPlayers = el("input", { class: "input", type: "number", min: "1", value: group?.max_players ?? 6 });
+
+  const feedback = el("div");
+  const rows = el("div", { class: "stack" });
+
+  const addRow = (time) => {
+    const day = el("select", { class: "input" });
+    WEEKDAYS.forEach((label, index) => {
+      const option = el("option", { value: String(index), text: label });
+      if (time && time.weekday === index) option.selected = true;
+      day.append(option);
+    });
+
+    const start = el("input", { class: "input", type: "time", value: (time?.starts_time ?? "17:30").slice(0, 5) });
+    const mins = el("input", { class: "input", type: "number", min: "15", step: "15", value: time?.duration_minutes ?? 60 });
+
+    const row = el("div", { class: "meeting-row" }, [
+      field("Day", day), field("Starts", start), field("Minutes", mins),
+      el("button", {
+        class: "button ghost", type: "button", text: "Remove",
+        onclick: () => row.remove(),
+      }),
+    ]);
+
+    row.readValue = () => ({
+      weekday: Number(day.value),
+      starts_time: start.value,
+      duration_minutes: Number(mins.value),
+    });
+
+    rows.append(row);
+  };
+
+  times.forEach(addRow);
+  if (times.length === 0) addRow(null);
+
+  const details = () => {
+    const out = {
+      name: name.value.trim(),
+      season_id: season.value,
+      location_id: location.value,
+      trainer_id: trainer.value,
+      min_age: minAge.value,
+      max_age: maxAge.value,
+      max_players: maxPlayers.value,
+    };
+    if (groupId) out.id = groupId;
+    return out;
+  };
+
+  const save = el("button", { class: "button", text: group ? "Save changes" : "Create group" });
+  save.onclick = busy(save, async () => {
+    mount(feedback);
+    try {
+      const id = await api.admin.saveGroup(details());
+      await api.admin.setMeetingTimes(
+        id, [...rows.children].filter((r) => r.readValue).map((r) => r.readValue()));
+      toast(group ? "Saved." : "Group created.");
+      onDone();
+    } catch (error) {
+      mount(feedback, errorBox(error));
+    }
+  });
+
+  const actions = [save];
+
+  if (group && group.status === "draft") {
+    const open = el("button", { class: "button ghost", text: "Open for booking" });
+    open.onclick = busy(open, async () => {
+      mount(feedback);
+      try {
+        const result = await api.admin.publishGroup(groupId);
+        toast(`Open — ${plural(result.sessions_generated, "session")} scheduled.`);
+        onDone();
+      } catch (error) {
+        mount(feedback, errorBox(error));
+      }
+    });
+    actions.push(open);
+  }
+
+  if (group && group.status !== "canceled") {
+    const close = el("button", { class: "button ghost", text: "Close group" });
+    close.onclick = async () => {
+      const reason = await promptDialog({
+        title: "Close this group?",
+        body: "The reason is recorded and goes to the families in it.",
+        label: "Reason",
+        placeholder: "The field was withdrawn",
+        confirmLabel: "Close group",
+      });
+      if (!reason) return;
+      mount(feedback);
+      try {
+        await api.admin.cancelGroup(groupId, reason);
+        toast("Closed.");
+        onDone();
+      } catch (error) {
+        mount(feedback, errorBox(error));
+      }
+    };
+    actions.push(close);
+  }
+
+  return el("div", { class: "stack" }, [
+    el("h2", { text: group ? group.name : "New group" }),
+
+    el("p", { class: "section-label", text: "Who it is for" }),
+    field("Name", name),
+    field("Season", season),
+    el("div", { class: "field-pair" }, [field("Youngest age", minAge), field("Oldest age", maxAge)]),
+    field("Most players", maxPlayers),
+
+    el("p", { class: "section-label", text: "Where, and with whom" }),
+    field("Field", location),
+    field("Trainer", trainer),
+    el("p", {
+      class: "muted",
+      text: "A group cannot open on a field nobody has verified, or with a trainer who is not cleared. Both are marked in the lists above.",
+    }),
+
+    el("p", { class: "section-label", text: "When it meets" }),
+    rows,
+    el("button", {
+      class: "button ghost", type: "button", text: "Add another day",
+      onclick: () => addRow(null),
+    }),
+    el("p", {
+      class: "muted",
+      text: "Sessions are generated across the season from this. Changing it is refused once a future session has someone booked into it.",
+    }),
+
+    feedback,
+    el("div", { class: "sheet-actions" }, actions),
+  ]);
+}
+
+/** The fields list. Verifying one is its own button because it is its own act. */
+async function fieldsView(panel, api, redraw) {
+  const locations = await api.admin.locations();
+  const feedback = el("div");
+
+  const add = el("button", { class: "button", text: "Add a field" });
+  add.onclick = async () => {
+    const name = await promptDialog({
+      title: "Add a field",
+      label: "Name",
+      placeholder: "Norristown Turf",
+      confirmLabel: "Add",
+    });
+    if (!name) return;
+    try {
+      await api.admin.saveLocation({ name, permit_status: "unknown" });
+      toast("Added. Set its permit status, then verify it.");
+      redraw();
+    } catch (error) {
+      mount(feedback, errorBox(error));
+    }
+  };
+
+  mount(panel,
+    el("h1", { text: "Fields" }),
+    el("p", { class: "lede", text: "A group cannot open on a field nobody has confirmed is real, free and ours to use." }),
+    feedback,
+    locations.length === 0
+      ? empty("No fields yet.")
+      : el("div", { class: "table-scroll" }, [
+          el("table", {}, [
+            el("thead", {}, [el("tr", {}, [
+              el("th", { text: "Field" }), el("th", { text: "Where" }),
+              el("th", { text: "Permit" }), el("th", { text: "Verified" }), el("th", { text: "" }),
+            ])]),
+            el("tbody", {}, locations.map((l) => {
+              const button = el("button", {
+                class: "button ghost",
+                text: l.verified_at ? "Withdraw" : "Verify",
+              });
+              button.onclick = busy(button, async () => {
+                mount(feedback);
+                try {
+                  await api.admin.verifyLocation(l.id, !l.verified_at);
+                  redraw();
+                } catch (error) {
+                  mount(feedback, errorBox(error));
+                }
+              });
+
+              return el("tr", {}, [
+                el("td", {}, [el("strong", { text: l.name })]),
+                el("td", { text: [l.city, l.state].filter(Boolean).join(", ") || "—" }),
+                el("td", { text: l.permit_status }),
+                el("td", {}, [l.verified_at
+                  ? badge("verified", "running")
+                  : badge("not verified", "nearly")]),
+                el("td", {}, [button]),
+              ]);
+            })),
+          ]),
+        ]),
+    el("div", { class: "sheet-actions" }, [add]),
+  );
 }

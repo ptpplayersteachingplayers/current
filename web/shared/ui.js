@@ -95,6 +95,48 @@ export function toast(message, tone = "info") {
   return node;
 }
 
+/**
+ * Ask for one line of text. The same sheet as confirmDialog, because a reason
+ * for closing a group is a decision and deserves the same weight — and because
+ * prompt() cannot be styled, cannot be reached by the tests, and looks like
+ * the browser asking rather than PTP.
+ */
+export function promptDialog({ title, body, label, placeholder = "", confirmLabel = "Save", required = true }) {
+  return new Promise((resolve) => {
+    const input = el("input", { class: "input", placeholder });
+    const dialog = el("div", { class: "sheet-backdrop" });
+
+    const close = (answer) => { dialog.remove(); resolve(answer); };
+
+    const submit = el("button", { class: "button", text: confirmLabel });
+    submit.onclick = () => {
+      const value = input.value.trim();
+      if (required && value === "") { input.focus(); return; }
+      close(value);
+    };
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") submit.click();
+      if (event.key === "Escape") close(null);
+    });
+
+    dialog.append(
+      el("div", { class: "sheet", role: "dialog", "aria-modal": "true" }, [
+        el("h2", { text: title }),
+        ...(body ? [el("p", { text: body })] : []),
+        field(label, input),
+        el("div", { class: "sheet-actions" }, [
+          el("button", { class: "button ghost", text: "Never mind", onclick: () => close(null) }),
+          submit,
+        ]),
+      ]),
+    );
+
+    document.body.append(dialog);
+    input.focus();
+  });
+}
+
 export function confirmDialog({ title, body, confirmLabel = "Confirm", cancelLabel = "Never mind" }) {
   return new Promise((resolve) => {
     const dialog = el("div", { class: "sheet-backdrop" });

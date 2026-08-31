@@ -139,6 +139,10 @@ async function open(path, fixturesName, { signedIn = true, routes = [] } = {}) {
       };
       if (!window.__PTP_FIXTURES__.signedIn) chosen.session = null;
       window.__PTP_FIXTURE_DATA__ = chosen;
+      // What the screens actually sent, so a test can assert the request and
+      // not merely that nothing threw.
+      fixtures.resetCalls?.();
+      window.__PTP_CALLS__ = fixtures.calls ?? [];
       window.__PTP_TEST_CLIENT__ = fakeSupabase(chosen);
     })();
   `);
@@ -475,6 +479,137 @@ console.log("ADMIN");
     const hasResume = await page.$(".sheet input[type=checkbox]");
     await page.click(".sheet button:text('Never mind')");
     return hasNote && hasResume ? true : "no note or no choice about the assistant";
+  });
+
+  await page.close();
+}
+
+console.log("");
+console.log("RUNNING THE TRAINING SIDE");
+
+{
+  const { page, problems } = await open("/my-ptp/admin/", "adminFixtures");
+  await page.waitForSelector("#app");
+
+  await check("a field nobody has verified is marked, not hidden", async () => {
+    await page.click(".tab:text('Fields')");
+    await page.waitForFunction(() => document.querySelector("#app h1")?.textContent === "Fields",
+      null, { timeout: TIMEOUT });
+    const text = await page.textContent("#app");
+    return text.includes("Cheltenham Field") && text.includes("not verified")
+      ? true : "the unverified field was not called out";
+  });
+
+  await check("…and the database's refusal is shown in its own words", async () => {
+    // Withdrawing verification under a live group is refused in SQL. The screen
+    // must show that sentence rather than "something went wrong".
+    await page.click("tr:has-text('Norristown Turf') button:text('Withdraw')");
+    await page.waitForSelector("#app .error, #app [role=alert]", { timeout: TIMEOUT });
+    const text = await page.textContent("#app");
+    return text.includes("group(s) are open on this field")
+      ? true : `the refusal was not shown: ${text.slice(0, 160)}`;
+  });
+
+  await check("no console error while doing it", () =>
+    problems.length === 0 ? true : problems.join(" | "));
+
+  await page.close();
+}
+
+{
+  const { page, problems } = await open("/my-ptp/admin/", "adminFixtures");
+  await page.waitForSelector("#app");
+
+  await page.click(".tab:text('Groups')");
+  await page.waitForFunction(() => document.querySelector("#app h1")?.textContent === "Groups",
+    null, { timeout: TIMEOUT });
+
+  await check("a group opens an editor rather than a dead row", async () => {
+    await page.click(".link-cell:text('Mon/Wed U9 Foundation')");
+    await page.waitForSelector(".sheet", { timeout: TIMEOUT });
+    const sheet = await page.textContent(".sheet");
+    return sheet.includes("Who it is for") && sheet.includes("When it meets")
+      ? true : `the editor did not open: ${sheet.slice(0, 120)}`;
+  });
+
+  await check("…loaded with the schedule it already has", async () => {
+    const rows = await page.$$eval(".sheet .meeting-row", (n) => n.length);
+    return rows === 2 ? true : `${rows} meeting rows, expected 2`;
+  });
+
+  await check("a trainer who is not cleared is labelled in the list", async () => {
+    const options = await page.$$eval(".sheet select option", (n) => n.map((o) => o.textContent));
+    return options.some((o) => o.includes("Marcus Bell") && o.includes("not cleared"))
+      ? true : `the options were: ${options.join(", ")}`;
+  });
+
+  await check("a day can be added and removed without leaving the sheet", async () => {
+    await page.click(".sheet button:text('Add another day')");
+    const after = await page.$$eval(".sheet .meeting-row", (n) => n.length);
+    await page.click(".sheet .meeting-row:last-of-type button:text('Remove')");
+    const back = await page.$$eval(".sheet .meeting-row", (n) => n.length);
+    return after === 3 && back === 2 ? true : `went ${after} then ${back}, expected 3 then 2`;
+  });
+
+  await check("saving sends the group and its schedule as two calls", async () => {
+    await page.click(".sheet button:text('Save changes')");
+    await page.waitForFunction(
+      () => (window.__PTP_CALLS__ ?? []).some((c) => c[0] === "set_group_meeting_times"),
+      null, { timeout: TIMEOUT });
+
+    const sent = await page.evaluate(() => window.__PTP_CALLS__.map((c) => c[0]));
+    return sent.includes("upsert_training_group") && sent.includes("set_group_meeting_times")
+      ? true : `it sent: ${sent.join(", ")}`;
+  });
+
+  await check("…with the times it was showing, not a guess", async () => {
+    const times = await page.evaluate(() => {
+      const call = window.__PTP_CALLS__.find((c) => c[0] === "set_group_meeting_times");
+      return call?.[1]?.p_times ?? [];
+    });
+    return times.length === 2 && times[0].weekday === 1 && times[0].starts_time === "17:30"
+      ? true : `it sent: ${JSON.stringify(times)}`;
+  });
+
+  await check("no console error while doing it", () =>
+    problems.length === 0 ? true : problems.join(" | "));
+
+  await page.close();
+}
+
+{
+  const { page } = await open("/my-ptp/admin/", "adminFixtures");
+  await page.waitForSelector("#app");
+
+  await check("closing a group asks for a reason before it will do it", async () => {
+    await page.click(".tab:text('Groups')");
+    await page.waitForFunction(() => document.querySelector("#app h1")?.textContent === "Groups",
+      null, { timeout: TIMEOUT });
+    await page.click(".link-cell:text('Mon/Wed U9 Foundation')");
+    await page.waitForSelector(".sheet", { timeout: TIMEOUT });
+    await page.click(".sheet button:text('Close group')");
+
+    await page.waitForFunction(
+      () => [...document.querySelectorAll(".sheet h2")].some((h) => h.textContent === "Close this group?"),
+      null, { timeout: TIMEOUT });
+
+    const text = await page.textContent("body");
+    return text.includes("goes to the families in it")
+      ? true : "it did not say the reason reaches the families";
+  });
+
+  await check("…and refuses to send an empty one", async () => {
+    const before = await page.evaluate(() =>
+      (window.__PTP_CALLS__ ?? []).filter((c) => c[0] === "cancel_training_group").length);
+
+    // The dialog's own confirm button, not the editor's — both read "Close
+    // group", and the dialog is the sheet that opened last.
+    await page.click(".sheet-backdrop:last-of-type button:text('Close group')");
+    await new Promise((r) => setTimeout(r, 200));
+
+    const after = await page.evaluate(() =>
+      (window.__PTP_CALLS__ ?? []).filter((c) => c[0] === "cancel_training_group").length);
+    return before === after ? true : "an empty reason was sent anyway";
   });
 
   await page.close();
